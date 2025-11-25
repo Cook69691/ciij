@@ -1,36 +1,49 @@
 #!/bin/bash
 
-# Script d'installation automatique OpenBox Minimal (Sécurité & Privacy) sur Debian 13 Trixie
+# Script d'installation automatique OpenBox Minimal (Optimisé Gaming) sur Debian 13 Trixie
 # Exécutez en root : sudo bash openbox-setup.sh
 # Assurez-vous d'être connecté après install minimal (écran noir CLI).
-# Créez d'abord un user non-root si pas fait : adduser votreuser && usermod -aG sudo votreuser
 
 set -e  # Arrête sur erreur
 export DEBIAN_FRONTEND=noninteractive
 
-# --- DÉBUT CONFIGURATION UTILISATEUR ---
-# Modifiez USERNAME si vous voulez forcer, sinon interactif
+# --- DÉBUT CONFIGURATION UTILISATEUR (ROBUSTE) ---
 USERNAME="${USERNAME:-}"  # Garde si défini en env, sinon vide
-if [ -z "$USERNAME" ]; then
-    read -p "Entrez votre nom d'utilisateur non-root (ex: votreuser) : " USERNAME
-fi
+
+# Boucle pour saisie valide
+while true; do
+    if [ -z "$USERNAME" ]; then
+        read -p "Entrez votre nom d'utilisateur non-root (ex: tonuser, sans espaces) : " USERNAME
+    fi
+
+    # Validation anti-placeholders
+    if [[ "$USERNAME" =~ ^(votreuser|anonymous|root|admin)$ ]] || [ -z "$USERNAME" ]; then
+        echo "ERREUR : Nom invalide (évitez 'votreuser', 'anonymous', 'root'). Réessayez."
+        USERNAME=""
+        continue
+    fi
+
+    USER_HOME="/home/$USERNAME"
+
+    # Si home existe, OK
+    if [ -d "$USER_HOME" ]; then
+        break
+    else
+        echo "INFO : L'utilisateur '$USERNAME' n'existe pas. Création automatique..."
+        echo "       (Mot de passe sera demandé ; utilisez-le pour login GUI après.)"
+        if adduser --disabled-password --gecos "" "$USERNAME" </dev/null; then  # Création sans password initial (prompt interactif)
+            echo "$USERNAME:$USERNAME" | chpasswd  # Password par défaut = username ; change-le après
+            usermod -aG sudo "$USERNAME"
+            echo "✓ Utilisateur '$USERNAME' créé avec succès (home: $USER_HOME)."
+            echo "  Password par défaut : '$USERNAME' – Changez-le avec 'passwd $USERNAME'."
+            break
+        else
+            echo "ERREUR : Création échouée. Créez manuellement : adduser $USERNAME && usermod -aG sudo $USERNAME"
+            exit 1
+        fi
+    fi
+done
 # --- FIN CONFIGURATION UTILISATEUR ---
-
-usermod -aG sudo "$USERNAME" 2>/dev/null || true
-
-# Validation
-if [ "$USERNAME" = "votreuser" ] || [ "$USERNAME" = "anonymous" ] || [ -z "$USERNAME" ]; then
-    echo "ERREUR CRITIQUE : Nom d'utilisateur invalide. Utilisez un vrai nom non-root."
-    exit 1
-fi
-
-USER_HOME="/home/$USERNAME"
-
-if [ ! -d "$USER_HOME" ]; then
-    echo "ERREUR : Le dossier $USER_HOME n'existe pas. Créez l'utilisateur d'abord."
-    echo "Exemple : adduser $USERNAME && usermod -aG sudo $USERNAME"
-    exit 1
-fi
 
 # Vérifier que le script est exécuté en root
 if [ "$EUID" -ne 0 ]; then 
