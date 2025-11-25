@@ -383,8 +383,7 @@ nm-applet &
 volumeicon &
 
 # Applications au démarrage (décommentez si nécessaire)
-# discord &
-# steam -silent &
+discord &
 EOF
 chmod +x "$USER_HOME/.config/openbox/autostart"
 
