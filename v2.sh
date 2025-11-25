@@ -10,7 +10,7 @@ export DEBIAN_FRONTEND=noninteractive
 # --- DÉBUT CONFIGURATION UTILISATEUR ---
 USERNAME="${USERNAME:-}"
 if [ -z "$USERNAME" ]; then
-    read -p "Entrez votre nom d'utilisateur non-root (ex: votreuser) : " USERNAME
+    read -p "Entrez votre nom d'utilisateur non-root (ex: votreuser) : " anonymous
 fi
 # --- FIN CONFIGURATION UTILISATEUR ---
 
