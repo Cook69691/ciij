@@ -588,6 +588,28 @@ print_success "Thème OpenBox 'Umbra' + Tint2 'Repentance' configuré par défau
 _highlight "Après reboot, si thème non appliqué : lancez 'obconf' pour sélectionner 'Umbra' et redémarrez la session (Alt+F4 > Restart)"
 _highlight "Pour Tint2 : vérifiez avec 'killall tint2; tint2 -c ~/.config/tint2/tint2rc &' si le panneau n'apparaît pas"
 
+# Ajoutez ce bloc de code juste après la section 24 (après print_success "Watchdogs désactivés" et avant la section 25).
+
+print_status "Configuration polling rate souris 1000Hz"
+
+# Désactiver autosuspend USB globalement pour éviter interférences avec polling élevé
+cat > /etc/modprobe.d/usbcore.conf <<EOF
+options usbcore autosuspend=-1
+EOF
+
+# Forcer polling 1000Hz (1ms) pour souris USB via usbhid
+cat > /etc/modprobe.d/usbhid.conf <<EOF
+options usbhid mousepoll=1
+EOF
+
+# Recharger les modules (optionnel, reboot final appliquera)
+modprobe -r usbhid usbcore 2>/dev/null || true
+modprobe usbhid mousepoll=1
+modprobe usbcore autosuspend=-1 2>/dev/null || true
+
+print_success "Polling rate souris forcé à 1000Hz (redémarrage requis pour pleine application)"
+_highlight "Vérifiez après reboot : cat /sys/module/usbhid/parameters/mousepoll (devrait être 1)"
+
 # 28. Script de vérification post-installation
 cat > "$USER_HOME/verify-install.sh" <<'VERIFYEOF'
 #!/bin/bash
