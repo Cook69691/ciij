@@ -492,8 +492,6 @@ MSW_CAPS_FILE="/usr/share/X11/xkb/symbols/mswindows-capslock"
 
 # A. Modifier /usr/share/X11/xkb/symbols/fr
 if [ -f "$FR_SYMBOLS_FILE" ]; then
-    # 1. Créer un backup (au cas où)
-    cp "$FR_SYMBOLS_FILE" "${FR_SYMBOLS_FILE}.bak_$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
     
     # 2. Vérifier si la ligne existe déjà pour éviter les doublons
     if ! grep -q 'include "mswindows-capslock"' "$FR_SYMBOLS_FILE"; then
