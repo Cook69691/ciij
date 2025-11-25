@@ -9,37 +9,6 @@
 set -e  # Arrête sur erreur
 export DEBIAN_FRONTEND=noninteractive
 
-# --- DÉBUT CONFIGURATION UTILISATEUR ---
-USERNAME="${USERNAME:-}"
-if [ -z "$USERNAME" ]; then
-    read -p "Entrez votre nom d'utilisateur non-root (ex: votreuser) : " USERNAME
-fi
-# --- FIN CONFIGURATION UTILISATEUR ---
-
-usermod -aG sudo "$USERNAME" 2>/dev/null || true
-
-# Validation
-if [ "$USERNAME" = "votreuser" ] || [ "$USERNAME" = "anonymous" ] || [ -z "$USERNAME" ]; then
-    echo "ERREUR CRITIQUE : Nom d'utilisateur invalide. Utilisez un vrai nom non-root."
-    exit 1
-fi
-
-USER_HOME="/home/$USERNAME"
-
-if [ ! -d "$USER_HOME" ]; then
-    echo "ERREUR : Le dossier $USER_HOME n'existe pas. Créez l'utilisateur d'abord."
-    echo "Exemple : adduser $USERNAME && usermod -aG sudo $USERNAME"
-    exit 1
-fi
-
-# Vérifier que le script est exécuté en root
-if [ "$EUID" -ne 0 ]; then 
-    echo "ERREUR : Ce script doit être exécuté en root (sudo)"
-    exit 1
-fi
-
-echo "[STATUS] Configuration pour l'utilisateur : $USERNAME (Home: $USER_HOME)"
-
 # Fonctions d'affichage
 print_status() {
     echo "=========================================="
