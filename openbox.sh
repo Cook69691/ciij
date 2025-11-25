@@ -550,6 +550,32 @@ EOF
 
 print_success "Configuration clavier Verr. Maj activée (redémarrage X11 requis pour appliquer)"
 
+# Ajoutez ce bloc de code juste après la section 17 (après print_success "Thèmes installés" et avant la section 18).
+
+print_status "Installation et configuration thème OpenBox 'Umbra' + Tint2 'Repentance'"
+
+# Installation collection thèmes OpenBox (inclut Umbra, thème sombre simple assorti à Repentance)
+git clone --depth=1 https://github.com/addy-dclxvi/openbox-theme-collections.git /usr/share/themes/openbox-themes || print_status "Clone OpenBox themes échoué (non critique)"
+
+# Téléchargement et configuration Tint2 Repentance
+mkdir -p "$USER_HOME/.config/tint2"
+wget -q --show-progress https://raw.githubusercontent.com/addy-dclxvi/tint2-theme-collections/master/repentance/repentance.tint2rc -O "$USER_HOME/.config/tint2/tint2rc"
+
+# Configuration OpenBox pour utiliser le thème Umbra
+if [ -f "$USER_HOME/.config/openbox/rc.xml" ]; then
+    sed -i 's|<name>.*</name>|<name>Umbra</name>|' "$USER_HOME/.config/openbox/rc.xml"
+fi
+
+# Modification de l'autostart pour utiliser le thème Tint2 spécifique
+if [ -f "$USER_HOME/.config/openbox/autostart" ]; then
+    sed -i 's|tint2 &|tint2 -c ~/.config/tint2/tint2rc &|' "$USER_HOME/.config/openbox/autostart"
+fi
+
+# Corriger permissions
+chown -R "$USERNAME:$USERNAME" "$USER_HOME/.config/tint2"
+
+print_success "Thème OpenBox 'Umbra' + Tint2 'Repentance' configuré par défaut"
+
 # 28. Script de vérification post-installation
 cat > "$USER_HOME/verify-install.sh" <<'VERIFYEOF'
 #!/bin/bash
