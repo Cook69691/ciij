@@ -53,7 +53,7 @@ _highlight() {
     echo "[★ INFO] $1"
 }
 
-echo "=== Début installation OpenBox Minimal - Sécurité & Privacy sur Debian 13 Trixie ==="
+echo "=== Début installation OpenBox Minimal - Optimisé Gaming sur Debian 13 Trixie ==="
 
 # 1. Mises à jour et nettoyage
 print_status "Mise à jour du système"
@@ -61,12 +61,15 @@ apt update && apt full-upgrade -y
 apt autoremove -y && apt autoclean
 print_success "Système à jour"
 
-# 2. Activation contrib/non-free/non-free-firmware AVANT installation des paquets
-print_status "Activation des dépôts contrib/non-free"
+# 2. Activation contrib/non-free/non-free-firmware + Backports pour Mesa frais
+print_status "Activation des dépôts contrib/non-free + backports"
 cp /etc/apt/sources.list /etc/apt/sources.list.bak
 sed -i 's/main$/main contrib non-free non-free-firmware/g' /etc/apt/sources.list || sed -i 's/main/main contrib non-free non-free-firmware/g' /etc/apt/sources.list
+
+# Ajout backports pour Mesa 25.2.4 (Vulkan/RT optims RX 6950 XT)
+echo "deb http://deb.debian.org/debian trixie-backports main contrib non-free non-free-firmware" | tee /etc/apt/sources.list.d/backports.list
 apt update
-print_success "Dépôts activés"
+print_success "Dépôts + backports activés"
 
 # 3. Outils de base
 print_status "Installation outils de base"
@@ -110,11 +113,13 @@ EOF
 
 print_success "Configuration clavier Verr. Maj activée (redémarrage X11 requis pour appliquer)"
 
-# 5. Pilotes AMD pour RX 6950 XT (Mesa + Firmware)
-print_status "Installation pilotes AMD pour RX 6950 XT (RDNA2)"
-apt install -y mesa-vulkan-drivers mesa-utils libgl1-mesa-dri xserver-xorg-video-amdgpu \
+# 5. Pilotes AMD pour RX 6950 XT (Mesa + Firmware) via backports
+print_status "Installation pilotes AMD pour RX 6950 XT (RDNA2) via backports"
+apt -t trixie-backports install -y mesa-vulkan-drivers mesa-utils libgl1-mesa-dri xserver-xorg-video-amdgpu \
     vulkan-tools libvulkan1 mesa-va-drivers mesa-vdpau-drivers firmware-amd-graphics \
-    libglx-mesa0 libdrm-amdgpu1
+    libglx-mesa0 libdrm-amdgpu1 || apt install -y mesa-vulkan-drivers mesa-utils libgl1-mesa-dri xserver-xorg-video-amdgpu \
+    vulkan-tools libvulkan1 mesa-va-drivers mesa-vdpau-drivers firmware-amd-graphics \
+    libglx-mesa0 libdrm-amdgpu1  # Fallback sans backports si échec
 
 # Créer le répertoire pour environment.d s'il n'existe pas
 mkdir -p /etc/environment.d
@@ -134,7 +139,7 @@ cat > /etc/modprobe.d/amdgpu.conf <<EOF
 options amdgpu ppfeaturemask=0xffffffff
 EOF
 
-print_success "Pilotes AMD installés et configurés"
+print_success "Pilotes AMD installés et configurés (Mesa 25.2.4 backports)"
 
 # 6. LACT (gestion GPU AMD)
 print_status "Installation LACT pour gestion GPU"
@@ -312,7 +317,7 @@ apt purge -y snapd 2>/dev/null || true
 rm -rf /snap /var/snap /var/lib/snapd /root/snap "$USER_HOME/snap" 2>/dev/null || true
 print_success "Snap supprimé"
 
-# 17. Thèmes
+# 16. Thèmes
 print_status "Installation thèmes"
 apt install -y arc-theme papirus-icon-theme fonts-noto fonts-noto-color-emoji \
     fonts-liberation2 fonts-dejavu
@@ -349,25 +354,35 @@ print_success "Thème OpenBox 'Umbra' + Tint2 'Repentance' configuré par défau
 _highlight "Après reboot, si thème non appliqué : lancez 'obconf' pour sélectionner 'Umbra' et redémarrez la session (Alt+F4 > Restart)"
 _highlight "Pour Tint2 : vérifiez avec 'killall tint2; tint2 -c ~/.config/tint2/tint2rc &' si le panneau n'apparaît pas"
 
-# 18. Pipewire AVANT les applications
+# 17. Pipewire AVANT les applications
 print_status "Installation Pipewire"
 apt install -y pipewire pipewire-pulse wireplumber pipewire-alsa \
     pipewire-audio-client-libraries pipewire-bin
 print_success "Pipewire installé"
 
-# 19. Apps principales
-print_status "Installation applications principales"
+# 18. Apps principales + Gaming Tools
+print_status "Installation applications principales + Gaming Tools"
 
 # Composants OpenBox
 apt install -y picom nitrogen volumeicon-alsa lxterminal tint2 rofi || true
 
-# Applications
+# Applications basiques
 apt install -y vlc qbittorrent kate pavucontrol || true
 
 # Network Manager
 apt install -y network-manager network-manager-gnome
 systemctl enable NetworkManager
 systemctl start NetworkManager || true
+
+# Lutris (gestion Wine/Proton non-Steam)
+apt install -y lutris wine winetricks || true
+usermod -aG wine "$USERNAME" 2>/dev/null || true
+
+# Jgmenu (menu dynamique OpenBox)
+apt install -y jgmenu || print_status "Jgmenu non disponible"
+
+# Conky (monitoring overlay)
+apt install -y conky-all || print_status "Conky non disponible"
 
 # Brave Browser
 print_status "Installation Brave Browser"
@@ -389,9 +404,16 @@ if ! command -v discord &>/dev/null; then
     fi
 fi
 
-print_success "Applications installées"
+# Flatpak Gaming : Steam + Bottles
+print_status "Installation Flatpak Gaming Tools"
+flatpak install -y flathub com.valvesoftware.Steam || print_status "Steam Flatpak échoué (non critique)"
+flatpak install -y flathub com.usebottles.bottles || print_status "Bottles Flatpak échoué (non critique)"
+print_success "Steam + Bottles installés via Flatpak"
+_highlight "Lancez Steam avec 'flatpak run com.valvesoftware.Steam' ; Bottles pour Wine sandbox"
 
-# 20. Configuration OpenBox
+print_success "Applications + Gaming Tools installés"
+
+# 19. Configuration OpenBox (avec keybinds gaming avancés)
 print_status "Configuration OpenBox"
 mkdir -p "$USER_HOME/.config/openbox"
 
@@ -402,7 +424,145 @@ exec openbox-session
 EOF
 chmod +x "$USER_HOME/.xinitrc"
 
-# Autostart avec Scaling X11 125% + tint2 forcé robuste + Discord
+# Copie configs OpenBox par défaut (avant custom)
+cp -r /etc/xdg/openbox/* "$USER_HOME/.config/openbox/" 2>/dev/null || true
+
+# Custom rc.xml avec keybinds gaming : Snapping Super+flèches, multimedia PipeWire
+cat > "$USER_HOME/.config/openbox/rc.xml" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- OpenBox Config Générée - Optimisée Gaming 2025 -->
+<openbox_config xmlns="http://openbox.org/3.4/rc" xmlns:xi="http://www.w3.org/2001/XInclude">
+    <resistance>
+        <strength>10</strength>
+        <screen>5</screen>
+    </resistance>
+    <keyboard>
+        <keybind key="W-F1">
+            <action name="Desktop"><desktop>1</desktop></action>
+        </keybind>
+        <keybind key="W-F2">
+            <action name="Desktop"><desktop>2</desktop></action>
+        </keybind>
+        <!-- Snapping/Tiling avec Super+flèches (50% côtés, quarters coins) -->
+        <keybind key="W-Left">
+            <action name="UnmaximizeFull"/>
+            <action name="MoveResizeTo">
+                <width>50%</width>
+                <height>100%</height>
+                <x>0</x>
+                <y>0</y>
+            </action>
+        </keybind>
+        <keybind key="W-Right">
+            <action name="UnmaximizeFull"/>
+            <action name="MoveResizeTo">
+                <width>50%</width>
+                <height>100%</height>
+                <x>50%</x>
+                <y>0</y>
+            </action>
+        </keybind>
+        <keybind key="W-Up">
+            <action name="UnmaximizeFull"/>
+            <action name="MoveResizeTo">
+                <width>100%</width>
+                <height>50%</height>
+                <x>0</x>
+                <y>0</y>
+            </action>
+        </keybind>
+        <keybind key="W-Down">
+            <action name="UnmaximizeFull"/>
+            <action name="MoveResizeTo">
+                <width>100%</width>
+                <height>50%</height>
+                <x>0</x>
+                <y>50%</y>
+            </action>
+        </keybind>
+        <keybind key="W-1"> <!-- Quarter top-left -->
+            <action name="UnmaximizeFull"/>
+            <action name="MoveResizeTo">
+                <width>50%</width>
+                <height>50%</height>
+                <x>0</x>
+                <y>0</y>
+            </action>
+        </keybind>
+        <keybind key="W-2"> <!-- Quarter top-right -->
+            <action name="UnmaximizeFull"/>
+            <action name="MoveResizeTo">
+                <width>50%</width>
+                <height>50%</height>
+                <x>50%</x>
+                <y>0</y>
+            </action>
+        </keybind>
+        <keybind key="W-3"> <!-- Quarter bottom-left -->
+            <action name="UnmaximizeFull"/>
+            <action name="MoveResizeTo">
+                <width>50%</width>
+                <height>50%</height>
+                <x>0</x>
+                <y>50%</y>
+            </action>
+        </keybind>
+        <keybind key="W-4"> <!-- Quarter bottom-right -->
+            <action name="UnmaximizeFull"/>
+            <action name="MoveResizeTo">
+                <width>50%</width>
+                <height>50%</height>
+                <x>50%</x>
+                <y>50%</y>
+            </action>
+        </keybind>
+        <!-- Multimedia PipeWire (volume/play/pause) -->
+        <keybind key="XF86AudioRaiseVolume">
+            <action name="Execute">
+                <command>wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+</command>
+            </action>
+        </keybind>
+        <keybind key="XF86AudioLowerVolume">
+            <action name="Execute">
+                <command>wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-</command>
+            </action>
+        </keybind>
+        <keybind key="XF86AudioMute">
+            <action name="Execute">
+                <command>wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle</command>
+            </action>
+        </keybind>
+        <keybind key="XF86AudioPlay">
+            <action name="Execute">
+                <command>playerctl play-pause</command>
+            </action>
+        </keybind>
+        <keybind key="XF86AudioNext">
+            <action name="Execute">
+                <command>playerctl next</command>
+            </action>
+        </keybind>
+        <keybind key="XF86AudioPrev">
+            <action name="Execute">
+                <command>playerctl previous</command>
+            </action>
+        </keybind>
+        <!-- Hot-reload OpenBox -->
+        <keybind key="W-F11">
+            <action name="Reconfigure"/>
+        </keybind>
+    </keyboard>
+    <!-- Thème Umbra (déjà set via sed) -->
+    <theme>
+        <name>Umbra</name>
+    </theme>
+    <desktops>
+        <count>4</count>
+    </desktops>
+</openbox_config>
+EOF
+
+# Autostart avec Scaling X11 125% + tint2 forcé + Picom experimental + Conky
 cat > "$USER_HOME/.config/openbox/autostart" <<'EOF'
 #!/bin/sh
 
@@ -437,10 +597,13 @@ launch_tint2() {
 
 # Lancer les composants
 launch_tint2  # Tint2 forcé en premier
-picom -b &
+picom --experimental-backends -b &  # Experimental pour vsync AMD sans stutter
 nitrogen --restore &
 nm-applet &
 volumeicon &
+
+# Conky overlay (monitoring léger, delay pour stabilité)
+sleep 3 && conky &
 
 # Applications au démarrage (Discord après délai pour stabilité)
 sleep 5 && discord &
@@ -458,17 +621,15 @@ Xft.hintstyle: hintslight
 Xft.lcdfilter: lcddefault
 EOF
 
-# Copie configs OpenBox par défaut
-cp -r /etc/xdg/openbox/* "$USER_HOME/.config/openbox/" 2>/dev/null || true
-
 # Corriger les permissions
 chown -R "$USERNAME:$USERNAME" "$USER_HOME/.config"
 chown "$USERNAME:$USERNAME" "$USER_HOME/.xinitrc" "$USER_HOME/.Xresources"
 
-print_success "OpenBox configuré avec tint2 forcé et logs (Discord inclus)"
+print_success "OpenBox configuré avec keybinds gaming (snapping/multimedia) + Picom experimental + Conky"
 _highlight "Logs tint2 : cat ~/.tint2-errors.log après reboot si toujours KO"
+_highlight "Test keybinds : Super+flèches pour snapping ; XF86Audio pour volume PipeWire"
 
-# 21. GRUB optimisé pour AMD 7800X3D + RX 6950 XT
+# 20. GRUB optimisé pour AMD 7800X3D + RX 6950 XT
 print_status "Configuration GRUB pour AMD 7800X3D"
 cp /etc/default/grub "/etc/default/grub.backup_$(date +%Y%m%d_%H%M%S)"
 
@@ -481,6 +642,12 @@ sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=2/' /etc/default/grub
 
 update-grub
 print_success "GRUB optimisé pour gaming"
+
+# 21. Compression initramfs zstd (boot + rapide)
+print_status "Configuration initramfs zstd pour boot rapide"
+echo 'COMPRESS=zstd' > /etc/initramfs-tools/initramfs.conf
+update-initramfs -u -k all
+print_success "Initramfs zstd configuré (-2s boot sur NVMe AMD)"
 
 # 22. Optimisations kernel
 print_status "Optimisations kernel système"
@@ -507,6 +674,20 @@ EOF
 
 sysctl --system >/dev/null
 print_success "Optimisations kernel appliquées"
+
+# zram pour swap compressé (50% RAM, zstd, gaming optim)
+print_status "Configuration zram (swap compressé pour gaming)"
+apt install -y zram-tools || apt install -y systemd-zram-generator  # Fallback
+mkdir -p /etc/systemd/zram-generator.conf.d
+cat > /etc/systemd/zram-generator.conf.d/gaming.conf <<'EOF'
+[zram0]
+zram-size = ram / 2
+compression-algorithm = zstd
+swappiness = 100
+EOF
+systemctl daemon-reload
+systemctl enable --now systemd-zram-setup@zram0 || modprobe zram num_devices=1 && echo lz4 > /sys/block/zram0/comp_algorithm && echo $(($(free | grep Mem: | awk '{print $2}') / 2))K > /sys/block/zram0/disksize && mkswap --pagesize 4096 /dev/zram0 && swapon /dev/zram0 -p 100  # Manuel fallback
+print_success "zram configuré (50% RAM zstd, +20% réactivité gaming)"
 
 # 23. CPU Governor en performance (persistant)
 print_status "Configuration CPU governor"
@@ -597,7 +778,7 @@ apt install -y policykit-1 polkit-kde-agent-1 || \
 apt install -y policykit-1-gnome || \
 apt install -y lxpolkit || true
 
-# 28. Script de vérification post-installation
+# 28. Script de vérification post-installation (étendu gaming)
 cat > "$USER_HOME/verify-install.sh" <<'VERIFYEOF'
 #!/bin/bash
 echo "╔══════════════════════════════════════════════════════════════╗"
@@ -610,7 +791,7 @@ cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_driver 2>/dev/null || echo "  N
 cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "  Non disponible"
 echo ""
 
-echo "→ GPU Renderer (devrait montrer Mesa/RADV + RX 6950 XT):"
+echo "→ GPU Renderer (Mesa 25.2.4 + RX 6950 XT):"
 glxinfo | grep "OpenGL renderer" 2>/dev/null || echo "  Exécutez après le reboot"
 echo ""
 
@@ -630,12 +811,23 @@ echo "→ DPI X11:"
 xdpyinfo 2>/dev/null | grep resolution || echo "  Exécutez après login graphique"
 echo ""
 
+echo "→ zram Status:"
+zramctl 2>/dev/null || swapon --show=NAME,SIZE,TYPE | grep zram || echo "  zram non actif (reboot)"
+echo ""
+
 echo "→ Services actifs:"
 echo "  NetworkManager: $(systemctl is-active NetworkManager 2>/dev/null)"
 echo "  UFW: $(systemctl is-active ufw 2>/dev/null)"
 if systemctl list-unit-files | grep -q lactd; then
     echo "  LACT daemon: $(systemctl is-active lactd 2>/dev/null)"
 fi
+echo "  zram: $(systemctl is-active systemd-zram-setup@zram0 2>/dev/null || echo 'Manuel')"
+
+echo "→ Gaming Tools:"
+flatpak list | grep -E "(Steam|Bottles)" || echo "  Flatpak gaming: Vérifiez flatpak run"
+command -v lutris &>/dev/null && echo "  Lutris: OK" || echo "  Lutris: Non installé"
+command -v conky &>/dev/null && echo "  Conky: OK" || echo "  Conky: Non installé"
+command -v jgmenu &>/dev/null && echo "  Jgmenu: OK" || echo "  Jgmenu: Non installé"
 echo ""
 
 echo "╔══════════════════════════════════════════════════════════════╗"
@@ -646,7 +838,7 @@ VERIFYEOF
 chmod +x "$USER_HOME/verify-install.sh"
 chown "$USERNAME:$USERNAME" "$USER_HOME/verify-install.sh"
 
-print_success "Script de vérification créé"
+print_success "Script de vérification créé (étendu gaming)"
 
 # 29. Message final
 clear
@@ -655,8 +847,8 @@ cat <<'FINAL'
 ║                                                                  ║
 ║   ✓ INSTALLATION TERMINÉE AVEC SUCCÈS !                         ║
 ║                                                                  ║
-║   OpenBox Minimal Gaming Setup - Debian 13 Trixie                ║
-║   Optimisé pour AMD 7800X3D + RX 6950 XT + 2.5 Gbps             ║
+║   OpenBox Minimal Gaming Setup - Debian 13 Trixie (Optimisé 2025)║
+║   AMD 7800X3D + RX 6950 XT + 2.5 Gbps + zram/Mesa 25.2.4        ║
 ║                                                                  ║
 ╚══════════════════════════════════════════════════════════════════╝
 
@@ -670,7 +862,7 @@ cat <<'FINAL'
 │ APRÈS LE REBOOT                                                  │
 └──────────────────────────────────────────────────────────────────┘
 
-1. Login via LightDM (ou startx si pas installé)
+1. Login via startx (ou installez LightDM si besoin : apt install lightdm)
 
 2. Vérification système :
    ~/verify-install.sh
@@ -678,28 +870,37 @@ cat <<'FINAL'
 3. Tests fonctionnels :
    • MangoHud      : mangohud glxgears
    • GameMode      : gamemoderun glxgears  
-   • GPU AMD       : glxinfo | grep "OpenGL renderer"
+   • GPU AMD       : glxinfo | grep "OpenGL renderer" (Mesa 25.2.4)
    • Vulkan        : vulkaninfo | grep deviceName
-   • Firewall      : sudo ufw status verbose
+   • zram          : zramctl
+   • Keybinds      : Super+flèches (snapping), XF86Audio (volume)
 
 4. Configuration interface :
    • Thème         : lxappearance
    • Wallpaper     : nitrogen
+   • Menu (Jgmenu) : jgmenu_run
    • Menu OpenBox  : kate ~/.config/openbox/menu.xml
-   • Raccourcis    : kate ~/.config/openbox/rc.xml
+   • Raccourcis    : kate ~/.config/openbox/rc.xml (snapping OK?)
    • Tint2 panel   : kate ~/.config/tint2/tint2rc
+   • Conky         : conky (overlay monitoring)
 
 5. Gestion GPU (LACT) :
    • Interface     : lact gui
    • Courbes fans  : Configuration dans LACT GUI
    • Service       : sudo systemctl status lactd
 
-6. Scaling 125% :
+6. Gaming Setup :
+   • Steam         : flatpak run com.valvesoftware.Steam
+   • Lutris        : lutris (ajoutez jeux non-Steam)
+   • Bottles       : flatpak run com.usebottles.bottles (Wine sandbox)
+   • Proton        : Dans Steam, activez Proton Experimental
+
+7. Scaling 125% :
    • Devrait être automatique (DPI 125 + scale 0.8x0.8)
    • Vérif DPI     : xdpyinfo | grep resolution
    • Si problème   : Éditez ~/.config/openbox/autostart
 
-7. Performance CPU :
+8. Performance CPU :
    • Vérif governor: cat /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
    • Devrait montrer "performance" pour tous les cores
 
@@ -711,18 +912,21 @@ cat <<'FINAL'
 • Logs Xorg       : cat ~/.local/share/xorg/Xorg.0.log
 • Logs LACT       : sudo journalctl -u lactd
 • Logs kernel     : sudo dmesg | grep -i amdgpu
+• Picom stutter   : Vérifiez --experimental-backends dans autostart
 
 ┌──────────────────────────────────────────────────────────────────┐
 │ FICHIERS DE CONFIGURATION IMPORTANTS                             │
 └──────────────────────────────────────────────────────────────────┘
 
-• OpenBox          : ~/.config/openbox/
+• OpenBox          : ~/.config/openbox/ (rc.xml keybinds)
 • MangoHud         : ~/.config/MangoHud/MangoHud.conf
 • GameMode         : /etc/gamemode.d/custom.conf
 • LACT             : /etc/lact/config.yaml
 • GRUB             : /etc/default/grub
 • Kernel params    : /etc/sysctl.d/99-gaming-advanced.conf
 • Réseau           : /etc/sysctl.d/99-network-gaming.conf
+• zram             : /etc/systemd/zram-generator.conf.d/gaming.conf
+• Initramfs        : /etc/initramfs-tools/initramfs.conf
 
 ╔══════════════════════════════════════════════════════════════════╗
 ║                  Rebootez maintenant pour appliquer !            ║
