@@ -11,6 +11,7 @@ export DEBIAN_FRONTEND=noninteractive
 # --- DÉBUT CONFIGURATION UTILISATEUR ---
 # !!! MODIFIEZ CECI AVEC VOTRE VRAI NOM D'UTILISATEUR NON-ROOT !!!
 USERNAME="anonymous"
+usermod -aG sudo anonymous
 # --- FIN CONFIGURATION UTILISATEUR ---
 
 # Validation
