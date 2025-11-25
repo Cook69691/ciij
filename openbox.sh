@@ -79,7 +79,7 @@ print_success "Environnement graphique installé"
 print_status "Installation pilotes AMD pour RX 6950 XT (RDNA2)"
 apt install -y mesa-vulkan-drivers mesa-utils libgl1-mesa-dri xserver-xorg-video-amdgpu \
     vulkan-tools libvulkan1 mesa-va-drivers mesa-vdpau-drivers firmware-amd-graphics \
-    libglx-mesa0 libgl1-mesa-glx libdrm-amdgpu1
+    libglx-mesa0 libdrm-amdgpu1
 
 # Créer le répertoire pour environment.d s'il n'existe pas
 mkdir -p /etc/environment.d
