@@ -267,7 +267,6 @@ print_success "Firewall UFW activé"
 print_status "Configuration AppArmor"
 apt install -y apparmor apparmor-utils apparmor-profiles apparmor-profiles-extra
 systemctl enable apparmor
-aa-enforce /etc/apparmor.d/* 2>/dev/null || print_status "Certains profils AppArmor non applicables"
 print_success "AppArmor activé"
 
 # 14. Mises à jour auto sécurité
