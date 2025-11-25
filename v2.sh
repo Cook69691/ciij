@@ -1,26 +1,40 @@
 #!/bin/bash
 
 # Script d'installation automatique OpenBox Minimal (Sécurité & Privacy) sur Debian 13 Trixie
-# Version CORRIGÉE - Démarrage automatique GARANTI
-# Exécutez en root : sudo bash openbox-setup-v3-corrected.sh
+# Exécutez en root : sudo bash openbox-setup.sh
 # Assurez-vous d'être connecté après install minimal (écran noir CLI).
 # Créez d'abord un user non-root si pas fait : adduser votreuser && usermod -aG sudo votreuser
 
 set -e  # Arrête sur erreur
 export DEBIAN_FRONTEND=noninteractive
 
-# Fonctions d'affichage
-print_status() {
-    echo "=========================================="
-    echo "[STATUS] $1"
-    echo "=========================================="
-}
-print_success() {
-    echo "[✓ SUCCESS] $1"
-}
-_highlight() {
-    echo "[★ INFO] $1"
-}
+# --- DÉBUT CONFIGURATION UTILISATEUR ---
+# !!! MODIFIEZ CECI AVEC VOTRE VRAI NOM D'UTILISATEUR NON-ROOT !!!
+USERNAME="anonymous"
+usermod -aG sudo anonymous
+# --- FIN CONFIGURATION UTILISATEUR ---
+
+# Validation
+if [ "$USERNAME" = "votreuser" ] || [ -z "$USERNAME" ]; then
+    echo "ERREUR CRITIQUE : Modifiez la variable USERNAME dans le script."
+    exit 1
+fi
+
+USER_HOME="/home/$USERNAME"
+
+if [ ! -d "$USER_HOME" ]; then
+    echo "ERREUR : Le dossier $USER_HOME n'existe pas. Créez l'utilisateur d'abord."
+    echo "Exemple : adduser $USERNAME && usermod -aG sudo $USERNAME"
+    exit 1
+fi
+
+# Vérifier que le script est exécuté en root
+if [ "$EUID" -ne 0 ]; then 
+    echo "ERREUR : Ce script doit être exécuté en root (sudo)"
+    exit 1
+fi
+
+echo "[STATUS] Configuration pour l'utilisateur : $USERNAME (Home: $USER_HOME)"
 
 echo "=== Début installation OpenBox Minimal - Optimisé Gaming sur Debian 13 Trixie ==="
 
