@@ -8,9 +8,33 @@ set -e  # Arrête sur erreur
 export DEBIAN_FRONTEND=noninteractive
 
 # --- DÉBUT CONFIGURATION UTILISATEUR ---
-USERNAME="${USERNAME:-}"
+# Hardcode ton username ici pour skipper le prompt (ou laisse vide pour qu'il demande)
+USERNAME="anonymous"  # Change ça si tu veux un autre nom, ex: USERNAME="gamer"
+
+# Si tu veux le prompt interactif, décommente les lignes ci-dessous et commente la ligne au-dessus
+# if [ -z "$USERNAME" ]; then
+#     read -p "Entrez votre nom d'utilisateur non-root (ex: gamer) : " USERNAME
+# fi
+
+# Validation basique (adaptée : accepte "anonymous" pour ton cas)
 if [ -z "$USERNAME" ]; then
-    read -p "Entrez votre nom d'utilisateur non-root (ex: votreuser) : " anonymous
+    echo "ERREUR : USERNAME vide. Définissez-le dans le code ou relancez."
+    exit 1
+fi
+
+USER_HOME="/home/$USERNAME"
+
+# Si home n'existe pas, on le crée auto (sans prompt mot de passe pour simplicité)
+if [ ! -d "$USER_HOME" ]; then
+    echo "[INFO] Création automatique de l'utilisateur '$USERNAME' (mot de passe par défaut : '$USERNAME')."
+    adduser --disabled-password --gecos "" "$USERNAME"  # Crée sans password initial
+    echo "$USERNAME:$USERNAME" | chpasswd  # Password = username (change-le après avec 'passwd anonymous')
+    usermod -aG sudo "$USERNAME"
+    usermod -aG wheel,render,video,gamemode "$USERNAME"  # Groupes gaming en bonus
+    echo "[✓] Utilisateur '$USERNAME' créé. Changez le mot de passe : passwd $USERNAME"
+else
+    echo "[✓] Utilisateur '$USERNAME' trouvé (home: $USER_HOME)."
+    usermod -aG wheel,render,video,gamemode "$USERNAME" 2>/dev/null || true  # Ajoute groupes si pas déjà
 fi
 # --- FIN CONFIGURATION UTILISATEUR ---
 
