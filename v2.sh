@@ -327,6 +327,23 @@ apt_install lutris wine winetricks pavucontrol vlc qbittorrent || true
 flatpak install -y flathub com.valvesoftware.Steam com.usebottles.bottles >/dev/null 2>&1 || true
 print_success "Apps principales installées (si disponibles)"
 
+# Discord
+if ! command -v discord &>/dev/null; then
+    print_status "Installation Discord"
+    wget -q --show-progress -O /tmp/discord.deb \
+        "https://discord.com/api/download?platform=linux&format=deb"
+    if [ -s /tmp/discord.deb ]; then
+        apt install -y /tmp/discord.deb || print_status "Discord installation échouée"
+        rm -f /tmp/discord.deb
+    else
+        print_status "Téléchargement Discord échoué (non critique)"
+    fi
+else
+    print_status "Discord déjà installé"
+fi
+print_success "Discord configuré"
+_highlight "Discord se lancera auto au démarrage (via autostart OpenBox)"
+
 # --- Openbox user configuration files (rc.xml, autostart) ---
 print_status "Configuration OpenBox pour l'utilisateur"
 mkdir -p "$USER_HOME/.config/openbox" "$USER_HOME/.config/tint2" "$USER_HOME/.config/nitrogen"
