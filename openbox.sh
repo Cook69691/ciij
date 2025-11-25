@@ -318,12 +318,6 @@ echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] http
 apt update
 apt install -y brave-browser
 
-# Steam (avec architecture i386 pour support 32-bit)
-print_status "Installation Steam"
-dpkg --add-architecture i386
-apt update
-apt install -y steam-installer || apt install -y steam || print_status "Steam non disponible"
-
 # Discord
 if ! command -v discord &>/dev/null; then
     print_status "Installation Discord"
@@ -550,31 +544,49 @@ EOF
 
 print_success "Configuration clavier Verr. Maj activée (redémarrage X11 requis pour appliquer)"
 
-# Ajoutez ce bloc de code juste après la section 17 (après print_success "Thèmes installés" et avant la section 18).
+# REMPLACEZ le bloc précédent ajouté après la section 17 par celui-ci (version corrigée pour installation utilisateur et extraction si zip)
 
 print_status "Installation et configuration thème OpenBox 'Umbra' + Tint2 'Repentance'"
 
-# Installation collection thèmes OpenBox (inclut Umbra, thème sombre simple assorti à Repentance)
-git clone --depth=1 https://github.com/addy-dclxvi/openbox-theme-collections.git /usr/share/themes/openbox-themes || print_status "Clone OpenBox themes échoué (non critique)"
+# Clone dans le dossier thèmes utilisateur (comme recommandé dans le README)
+git clone --depth=1 https://github.com/addy-dclxvi/openbox-theme-collections.git "$USER_HOME/.themes/openbox-themes" || print_status "Clone OpenBox themes échoué (non critique)"
+
+# Déplacer les thèmes directement dans ~/.themes/ et supprimer .git
+if [ -d "$USER_HOME/.themes/openbox-themes" ]; then
+    mv "$USER_HOME/.themes/openbox-themes"/* "$USER_HOME/.themes/" 2>/dev/null || true
+    rm -rf "$USER_HOME/.themes/openbox-themes" "$USER_HOME/.themes/.git"
+fi
+
+# Si il y a un zip dans Umbra, l'extraire (pour configs supplémentaires, mais thème OpenBox est déjà là)
+UMBRA_ZIP="$USER_HOME/.themes/Umbra/Umbra.zip"
+if [ -f "$UMBRA_ZIP" ]; then
+    unzip -q -o -d "$USER_HOME/.themes/Umbra/" "$UMBRA_ZIP" 2>/dev/null || true
+    rm -f "$UMBRA_ZIP"
+fi
 
 # Téléchargement et configuration Tint2 Repentance
 mkdir -p "$USER_HOME/.config/tint2"
-wget -q --show-progress https://raw.githubusercontent.com/addy-dclxvi/tint2-theme-collections/master/repentance/repentance.tint2rc -O "$USER_HOME/.config/tint2/tint2rc"
+wget -q --show-progress -O "$USER_HOME/.config/tint2/tint2rc" \
+    "https://raw.githubusercontent.com/addy-dclxvi/tint2-theme-collections/master/repentance/repentance.tint2rc"
 
-# Configuration OpenBox pour utiliser le thème Umbra
+# Configuration OpenBox pour utiliser le thème Umbra (section <theme>)
 if [ -f "$USER_HOME/.config/openbox/rc.xml" ]; then
-    sed -i 's|<name>.*</name>|<name>Umbra</name>|' "$USER_HOME/.config/openbox/rc.xml"
+    # Remplacer le nom du thème dans la section <theme>
+    sed -i '/<theme>/,/<\/theme>/ s|<name>\([^<]*\)</name>|<name>Umbra</name>|' "$USER_HOME/.config/openbox/rc.xml"
 fi
 
-# Modification de l'autostart pour utiliser le thème Tint2 spécifique
-if [ -f "$USER_HOME/.config/openbox/autostart" ]; then
+# Modification de l'autostart pour utiliser le thème Tint2 spécifique (ajouter -c si pas déjà)
+if [ -f "$USER_HOME/.config/openbox/autostart" ] && ! grep -q "tint2 -c" "$USER_HOME/.config/openbox/autostart"; then
     sed -i 's|tint2 &|tint2 -c ~/.config/tint2/tint2rc &|' "$USER_HOME/.config/openbox/autostart"
 fi
 
 # Corriger permissions
-chown -R "$USERNAME:$USERNAME" "$USER_HOME/.config/tint2"
+chown -R "$USERNAME:$USERNAME" "$USER_HOME/.themes" "$USER_HOME/.config/tint2"
 
+# Recharger OpenBox après config (mais reboot final le fera)
 print_success "Thème OpenBox 'Umbra' + Tint2 'Repentance' configuré par défaut"
+_highlight "Après reboot, si thème non appliqué : lancez 'obconf' pour sélectionner 'Umbra' et redémarrez la session (Alt+F4 > Restart)"
+_highlight "Pour Tint2 : vérifiez avec 'killall tint2; tint2 -c ~/.config/tint2/tint2rc &' si le panneau n'apparaît pas"
 
 # 28. Script de vérification post-installation
 cat > "$USER_HOME/verify-install.sh" <<'VERIFYEOF'
