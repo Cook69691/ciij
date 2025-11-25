@@ -610,6 +610,26 @@ modprobe usbcore autosuspend=-1 2>/dev/null || true
 print_success "Polling rate souris forcé à 1000Hz (redémarrage requis pour pleine application)"
 _highlight "Vérifiez après reboot : cat /sys/module/usbhid/parameters/mousepoll (devrait être 1)"
 
+# Ajoutez ce bloc de code juste après la section 20 (après print_success "OpenBox configuré" et avant la section 21).
+
+print_status "Configuration autostart forcé pour tint2 et Discord"
+
+# S'assurer que tint2 est lancé avec config spécifique (déjà ajouté précédemment, mais forcer si absent)
+if [ -f "$USER_HOME/.config/openbox/autostart" ] && ! grep -q "tint2 -c" "$USER_HOME/.config/openbox/autostart"; then
+    sed -i 's|tint2 &|tint2 -c ~/.config/tint2/tint2rc &|' "$USER_HOME/.config/openbox/autostart"
+fi
+
+# Ajouter Discord au démarrage si pas déjà présent (après sleep pour stabilité)
+if [ -f "$USER_HOME/.config/openbox/autostart" ] && ! grep -q "discord &" "$USER_HOME/.config/openbox/autostart"; then
+    sed -i '/sleep 2/a sleep 5 \&\& discord &' "$USER_HOME/.config/openbox/autostart"
+fi
+
+# Corriger permissions
+chown "$USERNAME:$USERNAME" "$USER_HOME/.config/openbox/autostart"
+
+print_success "Autostart forcé : tint2 et Discord lancés après startx"
+_highlight "Discord démarrera 5s après le chargement initial pour éviter les conflits"
+
 # 28. Script de vérification post-installation
 cat > "$USER_HOME/verify-install.sh" <<'VERIFYEOF'
 #!/bin/bash
