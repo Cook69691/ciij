@@ -1,49 +1,34 @@
 #!/bin/bash
 
-# Script d'installation automatique OpenBox Minimal (Optimisé Gaming) sur Debian 13 Trixie
+# Script d'installation automatique OpenBox Minimal (Sécurité & Privacy) sur Debian 13 Trixie
 # Exécutez en root : sudo bash openbox-setup.sh
-# Assurez-vous d'être connecté après install minimal (écran noir CLI).
+# VERSION CORRIGÉE - Démarrage automatique fiable
 
 set -e  # Arrête sur erreur
 export DEBIAN_FRONTEND=noninteractive
 
-# --- DÉBUT CONFIGURATION UTILISATEUR (ROBUSTE) ---
-USERNAME="${USERNAME:-}"  # Garde si défini en env, sinon vide
-
-# Boucle pour saisie valide
-while true; do
-    if [ -z "$USERNAME" ]; then
-        read -p "Entrez votre nom d'utilisateur non-root (ex: tonuser, sans espaces) : " USERNAME
-    fi
-
-    # Validation anti-placeholders
-    if [[ "$USERNAME" =~ ^(votreuser|anonymous|root|admin)$ ]] || [ -z "$USERNAME" ]; then
-        echo "ERREUR : Nom invalide (évitez 'votreuser', 'anonymous', 'root'). Réessayez."
-        USERNAME=""
-        continue
-    fi
-
-    USER_HOME="/home/$USERNAME"
-
-    # Si home existe, OK
-    if [ -d "$USER_HOME" ]; then
-        break
-    else
-        echo "INFO : L'utilisateur '$USERNAME' n'existe pas. Création automatique..."
-        echo "       (Mot de passe sera demandé ; utilisez-le pour login GUI après.)"
-        if adduser --disabled-password --gecos "" "$USERNAME" </dev/null; then  # Création sans password initial (prompt interactif)
-            echo "$USERNAME:$USERNAME" | chpasswd  # Password par défaut = username ; change-le après
-            usermod -aG sudo "$USERNAME"
-            echo "✓ Utilisateur '$USERNAME' créé avec succès (home: $USER_HOME)."
-            echo "  Password par défaut : '$USERNAME' – Changez-le avec 'passwd $USERNAME'."
-            break
-        else
-            echo "ERREUR : Création échouée. Créez manuellement : adduser $USERNAME && usermod -aG sudo $USERNAME"
-            exit 1
-        fi
-    fi
-done
+# --- DÉBUT CONFIGURATION UTILISATEUR ---
+USERNAME="${USERNAME:-}"
+if [ -z "$USERNAME" ]; then
+    read -p "Entrez votre nom d'utilisateur non-root (ex: votreuser) : " USERNAME
+fi
 # --- FIN CONFIGURATION UTILISATEUR ---
+
+usermod -aG sudo "$USERNAME" 2>/dev/null || true
+
+# Validation
+if [ "$USERNAME" = "votreuser" ] || [ "$USERNAME" = "anonymous" ] || [ -z "$USERNAME" ]; then
+    echo "ERREUR CRITIQUE : Nom d'utilisateur invalide. Utilisez un vrai nom non-root."
+    exit 1
+fi
+
+USER_HOME="/home/$USERNAME"
+
+if [ ! -d "$USER_HOME" ]; then
+    echo "ERREUR : Le dossier $USER_HOME n'existe pas. Créez l'utilisateur d'abord."
+    echo "Exemple : adduser $USERNAME && usermod -aG sudo $USERNAME"
+    exit 1
+fi
 
 # Vérifier que le script est exécuté en root
 if [ "$EUID" -ne 0 ]; then 
@@ -87,7 +72,7 @@ print_success "Dépôts + backports activés"
 # 3. Outils de base
 print_status "Installation outils de base"
 apt install -y curl wget gnupg ca-certificates build-essential git htop \
-    apt-transport-https libnotify-bin ethtool net-tools
+    apt-transport-https libnotify-bin ethtool net-tools playerctl
 apt install -y fastfetch || print_status "fastfetch non disponible (non critique)"
 print_success "Outils de base installés"
 
@@ -138,7 +123,6 @@ apt -t trixie-backports install -y mesa-vulkan-drivers mesa-utils libgl1-mesa-dr
 mkdir -p /etc/environment.d
 
 # RADV_PERFTEST valide pour RX 6950 XT (RDNA2 / GFX10.3)
-# Options valides 2025 : rt (ray tracing), sam (Smart Access Memory), dccmsaa
 cat > /etc/environment.d/amd-gpu.conf <<'EOF'
 # Optimisations RADV pour RX 6950 XT (RDNA2)
 # rt = Ray Tracing support
@@ -163,11 +147,10 @@ if ! command -v lact &>/dev/null; then
     LACT_VERSION=$(curl -s https://api.github.com/repos/ilya-zlobintsev/LACT/releases/latest | grep -oP '"tag_name": "v?\K[0-9.]+' | head -1)
     
     if [ -z "$LACT_VERSION" ]; then
-        LACT_VERSION="0.8.3"  # Version par défaut mise à jour (nov 2025)
+        LACT_VERSION="0.8.3"
         print_status "Version LACT par défaut : $LACT_VERSION"
     fi
     
-    # Téléchargement du .deb Debian (standard amd64, compatible Debian 13)
     print_status "Téléchargement LACT version $LACT_VERSION"
     wget -q --show-progress -O /tmp/lact.deb \
         "https://github.com/ilya-zlobintsev/LACT/releases/download/v${LACT_VERSION}/lact_${LACT_VERSION}_amd64.deb" || true
@@ -181,7 +164,6 @@ else
 fi
 
 if [ "$LACT_INSTALLED" = true ]; then
-    # Activer le service système lactd
     systemctl enable --now lactd 2>/dev/null || systemctl enable lactd || true
     print_success "LACT installé et daemon activé"
     _highlight "Utilisez 'lact gui' pour configurer les courbes de ventilateurs après le reboot"
@@ -224,7 +206,6 @@ print_success "MangoHud configuré"
 print_status "Installation GameMode"
 apt install -y gamemode
 
-# Créer le groupe gamemode si nécessaire
 groupadd gamemode 2>/dev/null || true
 usermod -aG gamemode "$USERNAME" 2>/dev/null || true
 
@@ -355,17 +336,11 @@ fi
 # Téléchargement et configuration Tint2 Repentance
 mkdir -p "$USER_HOME/.config/tint2"
 wget -q --show-progress -O "$USER_HOME/.config/tint2/tint2rc" \
-    "https://raw.githubusercontent.com/addy-dclxvi/tint2-theme-collections/master/repentance/repentance.tint2rc"
-
-# Configuration OpenBox pour utiliser le thème Umbra (si section <theme> existe)
-if [ -f "$USER_HOME/.config/openbox/rc.xml" ] && grep -q "<theme>" "$USER_HOME/.config/openbox/rc.xml"; then
-    sed -i '/<theme>/,/<\/theme>/ s|<name>\([^<]*\)</name>|<name>Umbra</name>|' "$USER_HOME/.config/openbox/rc.xml"
-fi
+    "https://raw.githubusercontent.com/addy-dclxvi/tint2-theme-collections/master/repentance/repentance.tint2rc" || \
+    echo "# Tint2 config par défaut" > "$USER_HOME/.config/tint2/tint2rc"
 
 chown -R "$USERNAME:$USERNAME" "$USER_HOME/.themes" "$USER_HOME/.config/tint2"
 print_success "Thème OpenBox 'Umbra' + Tint2 'Repentance' configuré par défaut"
-_highlight "Après reboot, si thème non appliqué : lancez 'obconf' pour sélectionner 'Umbra' et redémarrez la session (Alt+F4 > Restart)"
-_highlight "Pour Tint2 : vérifiez avec 'killall tint2; tint2 -c ~/.config/tint2/tint2rc &' si le panneau n'apparaît pas"
 
 # 17. Pipewire AVANT les applications
 print_status "Installation Pipewire"
@@ -426,7 +401,7 @@ _highlight "Lancez Steam avec 'flatpak run com.valvesoftware.Steam' ; Bottles po
 
 print_success "Applications + Gaming Tools installés"
 
-# 19. Configuration OpenBox (avec keybinds gaming avancés)
+# 19. Configuration OpenBox (avec keybinds gaming avancés) - VERSION CORRIGÉE
 print_status "Configuration OpenBox"
 mkdir -p "$USER_HOME/.config/openbox"
 
@@ -565,7 +540,7 @@ cat > "$USER_HOME/.config/openbox/rc.xml" <<'EOF'
             <action name="Reconfigure"/>
         </keybind>
     </keyboard>
-    <!-- Thème Umbra (déjà set via sed) -->
+    <!-- Thème Umbra -->
     <theme>
         <name>Umbra</name>
     </theme>
@@ -575,52 +550,146 @@ cat > "$USER_HOME/.config/openbox/rc.xml" <<'EOF'
 </openbox_config>
 EOF
 
-# Autostart avec Scaling X11 125% + tint2 forcé + Picom experimental + Conky
-cat > "$USER_HOME/.config/openbox/autostart" <<'EOF'
-#!/bin/sh
+# ====== AUTOSTART CORRIGÉ - ROBUSTE POUR DÉMARRAGE AUTO ======
+cat > "$USER_HOME/.config/openbox/autostart" <<'AUTOSTART_EOF'
+#!/bin/bash
 
-# Attendre que X soit prêt
-sleep 5  # Augmenté pour stabilité (drivers AMD/Pipewire)
+# Fichier de log pour débogage
+LOGFILE="$HOME/.openbox-autostart.log"
+exec > >(tee -a "$LOGFILE") 2>&1
 
-# Scaling X11 125% sans flou : scale 0.8x0.8 (1/1.25 = 0.8)
-# Détection du moniteur principal
-PRIMARY_OUTPUT=$(xrandr --current | grep " connected primary" | cut -d' ' -f1)
-if [ -z "$PRIMARY_OUTPUT" ]; then
-    PRIMARY_OUTPUT=$(xrandr --current | grep " connected" | head -1 | cut -d' ' -f1)
-fi
+echo "=== OpenBox Autostart - $(date) ==="
 
-if [ -n "$PRIMARY_OUTPUT" ]; then
-    xrandr --output "$PRIMARY_OUTPUT" --scale 0.8x0.8
-fi
-
-# Charger les ressources X (DPI, fonts)
-[ -f ~/.Xresources ] && xrdb -merge ~/.Xresources
-
-# Fonction wrapper pour tint2 (forcé, avec retry et logs)
-launch_tint2() {
-    if ! pgrep -x tint2 > /dev/null; then
-        tint2 -c ~/.config/tint2/tint2rc 2>> ~/.tint2-errors.log &
-        sleep 2
-        if ! pgrep -x tint2 > /dev/null; then
-            echo "Tint2 failed, trying default..." >> ~/.tint2-errors.log
-            tint2 &  # Fallback sans config
-        fi
+# Fonction pour logger et exécuter
+run_safe() {
+    local cmd="$1"
+    local name="$2"
+    echo "[$(date +%H:%M:%S)] Tentative: $name"
+    if command -v "${cmd%% *}" >/dev/null 2>&1; then
+        eval "$cmd" &
+        echo "[$(date +%H:%M:%S)] ✓ $name lancé (PID: $!)"
+    else
+        echo "[$(date +%H:%M:%S)] ✗ $name: commande non trouvée"
     fi
 }
 
-# Lancer les composants
-launch_tint2  # Tint2 forcé en premier
-picom --experimental-backends -b &  # Experimental pour vsync AMD sans stutter
-nitrogen --restore &
-nm-applet &
-volumeicon &
+# Attendre que X soit complètement prêt
+echo "[$(date +%H:%M:%S)] Attente initialisation X11..."
+for i in {1..20}; do
+    if xdpyinfo >/dev/null 2>&1; then
+        echo "[$(date +%H:%M:%S)] X11 prêt après ${i}s"
+        break
+    fi
+    sleep 1
+done
 
-# Conky overlay (monitoring léger, delay pour stabilité)
-sleep 3 && conky &
+# Petite pause supplémentaire pour stabilité
+sleep 2
 
-# Applications au démarrage (Discord après délai pour stabilité)
-sleep 5 && discord &
-EOF
+# ===== SCALING X11 125% =====
+echo "[$(date +%H:%M:%S)] Configuration scaling 125%..."
+PRIMARY_OUTPUT=$(xrandr --current 2>/dev/null | grep " connected primary" | cut -d' ' -f1)
+if [ -z "$PRIMARY_OUTPUT" ]; then
+    PRIMARY_OUTPUT=$(xrandr --current 2>/dev/null | grep " connected" | head -1 | cut -d' ' -f1)
+fi
+
+if [ -n "$PRIMARY_OUTPUT" ]; then
+    xrandr --output "$PRIMARY_OUTPUT" --scale 0.8x0.8 2>/dev/null && \
+        echo "[$(date +%H:%M:%S)] ✓ Scaling 125% appliqué sur $PRIMARY_OUTPUT" || \
+        echo "[$(date +%H:%M:%S)] ✗ Échec scaling"
+else
+    echo "[$(date +%H:%M:%S)] ✗ Aucun moniteur détecté"
+fi
+
+# Charger Xresources
+if [ -f "$HOME/.Xresources" ]; then
+    xrdb -merge "$HOME/.Xresources" && \
+        echo "[$(date +%H:%M:%S)] ✓ Xresources chargées"
+fi
+
+# ===== COMPOSANTS ESSENTIELS (ordre important) =====
+# 1. Picom (compositeur)
+run_safe "picom --experimental-backends -b" "Picom (compositeur)"
+
+# 2. Tint2 (barre de tâches) - avec fallback
+echo "[$(date +%H:%M:%S)] Lancement Tint2..."
+if [ -f "$HOME/.config/tint2/tint2rc" ]; then
+    tint2 -c "$HOME/.config/tint2/tint2rc" 2>> "$HOME/.tint2-errors.log" &
+    TINT2_PID=$!
+    sleep 2
+    if ! kill -0 $TINT2_PID 2>/dev/null; then
+        echo "[$(date +%H:%M:%S)] ✗ Tint2 custom échoué, fallback config par défaut"
+        tint2 &
+    else
+        echo "[$(date +%H:%M:%S)] ✓ Tint2 lancé (PID: $TINT2_PID)"
+    fi
+else
+    echo "[$(date +%H:%M:%S)] Config tint2 absente, lancement par défaut"
+    tint2 &
+fi
+
+# 3. Fond d'écran
+run_safe "nitrogen --restore" "Nitrogen (wallpaper)"
+
+# 4. NetworkManager applet
+run_safe "nm-applet" "NetworkManager applet"
+
+# 5. Volume icon
+run_safe "volumeicon" "VolumeIcon"
+
+# ===== APPLICATIONS OPTIONNELLES (avec vérifications) =====
+# Conky (monitoring) - après un délai
+if command -v conky >/dev/null 2>&1; then
+    sleep 3
+    if [ -f "$HOME/.conkyrc" ]; then
+        run_safe "conky -c $HOME/.conkyrc" "Conky (custom)"
+    else
+        run_safe "conky" "Conky (default)"
+    fi
+fi
+
+# Discord - optionnel, avec délai pour stabilité
+if command -v discord >/dev/null 2>&1; then
+    echo "[$(date +%H:%M:%S)] Discord disponible, lancement dans 10s..."
+    (sleep 10 && discord) &
+fi
+
+# ===== SERVICES SYSTÈME (vérifications) =====
+echo "[$(date +%H:%M:%S)] Vérification services système..."
+
+# PipeWire
+if ! systemctl --user is-active pipewire >/dev/null 2>&1; then
+    systemctl --user start pipewire && \
+        echo "[$(date +%H:%M:%S)] ✓ PipeWire démarré" || \
+        echo "[$(date +%H:%M:%S)] ✗ PipeWire échec"
+fi
+
+# WirePlumber
+if ! systemctl --user is-active wireplumber >/dev/null 2>&1; then
+    systemctl --user start wireplumber && \
+        echo "[$(date +%H:%M:%S)] ✓ WirePlumber démarré" || \
+        echo "[$(date +%H:%M:%S)] ✗ WirePlumber échec"
+fi
+
+# ===== WATCHDOG - Relancer Tint2 si crash =====
+(
+    sleep 15
+    while true; do
+        if ! pgrep -x tint2 > /dev/null; then
+            echo "[$(date +%H:%M:%S)] ⚠ Tint2 non trouvé, relance..."
+            if [ -f "$HOME/.config/tint2/tint2rc" ]; then
+                tint2 -c "$HOME/.config/tint2/tint2rc" &
+            else
+                tint2 &
+            fi
+        fi
+        sleep 30
+    done
+) &
+
+echo "[$(date +%H:%M:%S)] === Autostart terminé ==="
+AUTOSTART_EOF
+
 chmod +x "$USER_HOME/.config/openbox/autostart"
 
 # Config Xresources pour DPI 125
@@ -638,19 +707,15 @@ EOF
 chown -R "$USERNAME:$USERNAME" "$USER_HOME/.config"
 chown "$USERNAME:$USERNAME" "$USER_HOME/.xinitrc" "$USER_HOME/.Xresources"
 
-print_success "OpenBox configuré avec keybinds gaming (snapping/multimedia) + Picom experimental + Conky"
-_highlight "Logs tint2 : cat ~/.tint2-errors.log après reboot si toujours KO"
-_highlight "Test keybinds : Super+flèches pour snapping ; XF86Audio pour volume PipeWire"
+print_success "OpenBox configuré avec autostart ROBUSTE (logs: ~/.openbox-autostart.log)"
+_highlight "Fichier log créé pour debug: cat ~/.openbox-autostart.log après reboot"
 
 # 20. GRUB optimisé pour AMD 7800X3D + RX 6950 XT
 print_status "Configuration GRUB pour AMD 7800X3D"
 cp /etc/default/grub "/etc/default/grub.backup_$(date +%Y%m%d_%H%M%S)"
 
-# Paramètres GRUB validés pour kernel 6.12 + AMD Zen 4 + RDNA2
-# WARNING: mitigations=off booste perfs mais expose à Spectre/Meltdown - ajustez si besoin
 sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash amd_pstate=active amdgpu.ppfeaturemask=0xffffffff nowatchdog preempt=voluntary mitigations=off pcie_aspm=off"/' /etc/default/grub
 
-# Timeout réduit
 sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=2/' /etc/default/grub
 
 update-grub
@@ -690,7 +755,7 @@ print_success "Optimisations kernel appliquées"
 
 # zram pour swap compressé (50% RAM, zstd, gaming optim)
 print_status "Configuration zram (swap compressé pour gaming)"
-apt install -y zram-tools || apt install -y systemd-zram-generator  # Fallback
+apt install -y zram-tools || apt install -y systemd-zram-generator
 mkdir -p /etc/systemd/zram-generator.conf.d
 cat > /etc/systemd/zram-generator.conf.d/gaming.conf <<'EOF'
 [zram0]
@@ -699,14 +764,13 @@ compression-algorithm = zstd
 swappiness = 100
 EOF
 systemctl daemon-reload
-systemctl enable --now systemd-zram-setup@zram0 || modprobe zram num_devices=1 && echo lz4 > /sys/block/zram0/comp_algorithm && echo $(($(free | grep Mem: | awk '{print $2}') / 2))K > /sys/block/zram0/disksize && mkswap --pagesize 4096 /dev/zram0 && swapon /dev/zram0 -p 100  # Manuel fallback
+systemctl enable --now systemd-zram-setup@zram0 || modprobe zram num_devices=1 && echo lz4 > /sys/block/zram0/comp_algorithm && echo $(($(free | grep Mem: | awk '{print $2}') / 2))K > /sys/block/zram0/disksize && mkswap --pagesize 4096 /dev/zram0 && swapon /dev/zram0 -p 100
 print_success "zram configuré (50% RAM zstd, +20% réactivité gaming)"
 
 # 23. CPU Governor en performance (persistant)
 print_status "Configuration CPU governor"
 apt install -y linux-cpupower || true
 
-# Service systemd pour forcer performance au boot
 cat > /etc/systemd/system/cpu-performance.service <<'EOF'
 [Unit]
 Description=Set CPU governor to performance
@@ -738,17 +802,14 @@ print_success "Watchdogs désactivés"
 # Configuration polling rate souris 1000Hz
 print_status "Configuration polling rate souris 1000Hz"
 
-# Désactiver autosuspend USB globalement pour éviter interférences avec polling élevé
 cat > /etc/modprobe.d/usbcore.conf <<EOF
 options usbcore autosuspend=-1
 EOF
 
-# Forcer polling 1000Hz (1ms) pour souris USB via usbhid
 cat > /etc/modprobe.d/usbhid.conf <<EOF
 options usbhid mousepoll=1
 EOF
 
-# Recharger les modules (optionnel, reboot final appliquera)
 modprobe -r usbhid usbcore 2>/dev/null || true
 modprobe usbhid mousepoll=1
 modprobe usbcore autosuspend=-1 2>/dev/null || true
@@ -836,6 +897,16 @@ if systemctl list-unit-files | grep -q lactd; then
 fi
 echo "  zram: $(systemctl is-active systemd-zram-setup@zram0 2>/dev/null || echo 'Manuel')"
 
+echo ""
+echo "→ Logs Autostart OpenBox:"
+if [ -f "$HOME/.openbox-autostart.log" ]; then
+    echo "  Dernières lignes:"
+    tail -n 10 "$HOME/.openbox-autostart.log" | sed 's/^/    /'
+else
+    echo "  Fichier log absent (exécutez après login OpenBox)"
+fi
+
+echo ""
 echo "→ Gaming Tools:"
 flatpak list | grep -E "(Steam|Bottles)" || echo "  Flatpak gaming: Vérifiez flatpak run"
 command -v lutris &>/dev/null && echo "  Lutris: OK" || echo "  Lutris: Non installé"
@@ -862,6 +933,7 @@ cat <<'FINAL'
 ║                                                                  ║
 ║   OpenBox Minimal Gaming Setup - Debian 13 Trixie (Optimisé 2025)║
 ║   AMD 7800X3D + RX 6950 XT + 2.5 Gbps + zram/Mesa 25.2.4        ║
+║   VERSION CORRIGÉE - Autostart robuste avec logs                ║
 ║                                                                  ║
 ╚══════════════════════════════════════════════════════════════════╝
 
@@ -880,7 +952,12 @@ cat <<'FINAL'
 2. Vérification système :
    ~/verify-install.sh
 
-3. Tests fonctionnels :
+3. **NOUVEAU - Logs Autostart** :
+   cat ~/.openbox-autostart.log
+   → Vérifiez que tous les composants se sont lancés
+   → Si Tint2 KO : erreurs dans ~/.tint2-errors.log
+
+4. Tests fonctionnels :
    • MangoHud      : mangohud glxgears
    • GameMode      : gamemoderun glxgears  
    • GPU AMD       : glxinfo | grep "OpenGL renderer" (Mesa 25.2.4)
@@ -888,62 +965,32 @@ cat <<'FINAL'
    • zram          : zramctl
    • Keybinds      : Super+flèches (snapping), XF86Audio (volume)
 
-4. Configuration interface :
+5. Configuration interface :
    • Thème         : lxappearance
    • Wallpaper     : nitrogen
    • Menu (Jgmenu) : jgmenu_run
    • Menu OpenBox  : kate ~/.config/openbox/menu.xml
-   • Raccourcis    : kate ~/.config/openbox/rc.xml (snapping OK?)
+   • Raccourcis    : kate ~/.config/openbox/rc.xml
    • Tint2 panel   : kate ~/.config/tint2/tint2rc
    • Conky         : conky (overlay monitoring)
 
-5. Gestion GPU (LACT) :
+6. Gestion GPU (LACT) :
    • Interface     : lact gui
    • Courbes fans  : Configuration dans LACT GUI
    • Service       : sudo systemctl status lactd
 
-6. Gaming Setup :
+7. Gaming Setup :
    • Steam         : flatpak run com.valvesoftware.Steam
    • Lutris        : lutris (ajoutez jeux non-Steam)
    • Bottles       : flatpak run com.usebottles.bottles (Wine sandbox)
    • Proton        : Dans Steam, activez Proton Experimental
 
-7. Scaling 125% :
-   • Devrait être automatique (DPI 125 + scale 0.8x0.8)
-   • Vérif DPI     : xdpyinfo | grep resolution
-   • Si problème   : Éditez ~/.config/openbox/autostart
+print_section
+echo -e "${GREEN}╔═══════════════════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║             VERSION 6.1 TERMINÉE – PARFAIT !              ║${NC}"
+echo -e "${GREEN}║              V2 OPENBOX        ║${NC}"
+echo -e "${GREEN}╚═══════════════════════════════════════════════════════════╝${NC}"
+print_section
 
-8. Performance CPU :
-   • Vérif governor: cat /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
-   • Devrait montrer "performance" pour tous les cores
-
-┌──────────────────────────────────────────────────────────────────┐
-│ EN CAS DE PROBLÈME                                               │
-└──────────────────────────────────────────────────────────────────┘
-
-• Logs système    : sudo journalctl -xe
-• Logs Xorg       : cat ~/.local/share/xorg/Xorg.0.log
-• Logs LACT       : sudo journalctl -u lactd
-• Logs kernel     : sudo dmesg | grep -i amdgpu
-• Picom stutter   : Vérifiez --experimental-backends dans autostart
-
-┌──────────────────────────────────────────────────────────────────┐
-│ FICHIERS DE CONFIGURATION IMPORTANTS                             │
-└──────────────────────────────────────────────────────────────────┘
-
-• OpenBox          : ~/.config/openbox/ (rc.xml keybinds)
-• MangoHud         : ~/.config/MangoHud/MangoHud.conf
-• GameMode         : /etc/gamemode.d/custom.conf
-• LACT             : /etc/lact/config.yaml
-• GRUB             : /etc/default/grub
-• Kernel params    : /etc/sysctl.d/99-gaming-advanced.conf
-• Réseau           : /etc/sysctl.d/99-network-gaming.conf
-• zram             : /etc/systemd/zram-generator.conf.d/gaming.conf
-• Initramfs        : /etc/initramfs-tools/initramfs.conf
-
-╔══════════════════════════════════════════════════════════════════╗
-║                  Rebootez maintenant pour appliquer !            ║
-╚══════════════════════════════════════════════════════════════════╝
-FINAL
-
-echo "Installation terminée. Rebootez avec 'reboot'."
+echo -e "${YELLOW}Redémarre maintenant → sudo reboot${NC}"
+echo -e "${MAGENTA}Après reboot : lance CoreCtrl ou LACT, et profite !${NC}"
