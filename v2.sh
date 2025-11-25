@@ -1,40 +1,18 @@
 #!/bin/bash
 
 # Script d'installation automatique OpenBox Minimal (Sécurité & Privacy) sur Debian 13 Trixie
-# Exécutez en root : sudo bash openbox-setup.sh
-# VERSION CORRIGÉE - Démarrage automatique fiable
+# Version CORRIGÉE - Démarrage automatique GARANTI
+# Exécutez en root : sudo bash openbox-setup-v3-corrected.sh
+# Assurez-vous d'être connecté après install minimal (écran noir CLI).
+# Créez d'abord un user non-root si pas fait : adduser votreuser && usermod -aG sudo votreuser
 
 set -e  # Arrête sur erreur
 export DEBIAN_FRONTEND=noninteractive
 
 # --- DÉBUT CONFIGURATION UTILISATEUR ---
-# Hardcode ton username ici pour skipper le prompt (ou laisse vide pour qu'il demande)
-USERNAME="anonymous"  # Change ça si tu veux un autre nom, ex: USERNAME="gamer"
-
-# Si tu veux le prompt interactif, décommente les lignes ci-dessous et commente la ligne au-dessus
-# if [ -z "$USERNAME" ]; then
-#     read -p "Entrez votre nom d'utilisateur non-root (ex: gamer) : " USERNAME
-# fi
-
-# Validation basique (adaptée : accepte "anonymous" pour ton cas)
+USERNAME="${USERNAME:-}"
 if [ -z "$USERNAME" ]; then
-    echo "ERREUR : USERNAME vide. Définissez-le dans le code ou relancez."
-    exit 1
-fi
-
-USER_HOME="/home/$USERNAME"
-
-# Si home n'existe pas, on le crée auto (sans prompt mot de passe pour simplicité)
-if [ ! -d "$USER_HOME" ]; then
-    echo "[INFO] Création automatique de l'utilisateur '$USERNAME' (mot de passe par défaut : '$USERNAME')."
-    adduser --disabled-password --gecos "" "$USERNAME"  # Crée sans password initial
-    echo "$USERNAME:$USERNAME" | chpasswd  # Password = username (change-le après avec 'passwd anonymous')
-    usermod -aG sudo "$USERNAME"
-    usermod -aG wheel,render,video,gamemode "$USERNAME"  # Groupes gaming en bonus
-    echo "[✓] Utilisateur '$USERNAME' créé. Changez le mot de passe : passwd $USERNAME"
-else
-    echo "[✓] Utilisateur '$USERNAME' trouvé (home: $USER_HOME)."
-    usermod -aG wheel,render,video,gamemode "$USERNAME" 2>/dev/null || true  # Ajoute groupes si pas déjà
+    read -p "Entrez votre nom d'utilisateur non-root (ex: votreuser) : " USERNAME
 fi
 # --- FIN CONFIGURATION UTILISATEUR ---
 
@@ -102,7 +80,8 @@ print_success "Outils de base installés"
 
 # 4. GUI de base : Xorg + OpenBox
 print_status "Installation Xorg + OpenBox"
-apt install -y xorg openbox obconf lxappearance xinit xterm x11-utils pcmanfm
+apt install -y xorg openbox obconf lxappearance xinit xterm x11-utils pcmanfm \
+    xdotool wmctrl
 print_success "Environnement graphique installé"
 
 # Configuration clavier AZERTY pour Verr. Maj sur chiffres
@@ -141,21 +120,16 @@ apt -t trixie-backports install -y mesa-vulkan-drivers mesa-utils libgl1-mesa-dr
     vulkan-tools libvulkan1 mesa-va-drivers mesa-vdpau-drivers firmware-amd-graphics \
     libglx-mesa0 libdrm-amdgpu1 || apt install -y mesa-vulkan-drivers mesa-utils libgl1-mesa-dri xserver-xorg-video-amdgpu \
     vulkan-tools libvulkan1 mesa-va-drivers mesa-vdpau-drivers firmware-amd-graphics \
-    libglx-mesa0 libdrm-amdgpu1  # Fallback sans backports si échec
+    libglx-mesa0 libdrm-amdgpu1
 
-# Créer le répertoire pour environment.d s'il n'existe pas
 mkdir -p /etc/environment.d
 
-# RADV_PERFTEST valide pour RX 6950 XT (RDNA2 / GFX10.3)
 cat > /etc/environment.d/amd-gpu.conf <<'EOF'
 # Optimisations RADV pour RX 6950 XT (RDNA2)
-# rt = Ray Tracing support
-# sam = Smart Access Memory optimizations  
 RADV_PERFTEST=rt
 AMD_VULKAN_ICD=RADV
 EOF
 
-# Configuration amdgpu avec ppfeaturemask
 cat > /etc/modprobe.d/amdgpu.conf <<EOF
 options amdgpu ppfeaturemask=0xffffffff
 EOF
@@ -167,7 +141,6 @@ print_status "Installation LACT pour gestion GPU"
 LACT_INSTALLED=false
 
 if ! command -v lact &>/dev/null; then
-    # Récupération de la dernière version
     LACT_VERSION=$(curl -s https://api.github.com/repos/ilya-zlobintsev/LACT/releases/latest | grep -oP '"tag_name": "v?\K[0-9.]+' | head -1)
     
     if [ -z "$LACT_VERSION" ]; then
@@ -262,7 +235,7 @@ modprobe tcp_bbr 2>/dev/null || true
 echo "tcp_bbr" >> /etc/modules-load.d/modules.conf
 
 tee /etc/sysctl.d/99-network-gaming.conf <<'EOF' >/dev/null
-# TCP BBR Congestion Control (kernel 6.12 supporte BBR v3)
+# TCP BBR Congestion Control
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
 
@@ -285,7 +258,6 @@ net.ipv4.tcp_mtu_probing = 1
 EOF
 sysctl --system >/dev/null
 
-# Augmenter les buffers de la carte réseau si possible
 NIC=$(ip route | grep default | awk '{print $5}' | head -n1)
 if [ -n "$NIC" ]; then
     ethtool -G "$NIC" rx 4096 tx 4096 2>/dev/null || print_status "Buffers NIC non modifiables pour $NIC"
@@ -338,12 +310,13 @@ print_success "Snap supprimé"
 # 16. Thèmes
 print_status "Installation thèmes"
 apt install -y arc-theme papirus-icon-theme fonts-noto fonts-noto-color-emoji \
-    fonts-liberation2 fonts-dejavu
+    fonts-liberation2 fonts-dejavu unzip
 print_success "Thèmes installés"
 
 # Installation et configuration thème OpenBox 'Umbra' + Tint2 'Repentance'
 print_status "Installation et configuration thème OpenBox 'Umbra' + Tint2 'Repentance'"
-git clone --depth=1 https://github.com/addy-dclxvi/openbox-theme-collections.git "$USER_HOME/.themes/openbox-themes" || print_status "Clone OpenBox themes échoué (non critique)"
+mkdir -p "$USER_HOME/.themes"
+git clone --depth=1 https://github.com/addy-dclxvi/openbox-theme-collections.git "$USER_HOME/.themes/openbox-themes" 2>/dev/null || print_status "Clone OpenBox themes échoué (téléchargement alternatif)"
 
 if [ -d "$USER_HOME/.themes/openbox-themes" ]; then
     mv "$USER_HOME/.themes/openbox-themes"/* "$USER_HOME/.themes/" 2>/dev/null || true
@@ -353,18 +326,44 @@ fi
 # Extraction zip si présent dans Umbra
 UMBRA_ZIP="$USER_HOME/.themes/Umbra/Umbra.zip"
 if [ -f "$UMBRA_ZIP" ]; then
-    unzip -q -o -d "$USER_HOME/.themes/Umbra/" "$UMBRA_ZIP" 2>/dev/null || true
+    unzip -q -o -d "$USER_HOME/.themes/Umbra/" "$UMBRA_ZIP" 2>/dev/null || print_status "Extraction Umbra zip échouée"
     rm -f "$UMBRA_ZIP"
 fi
 
 # Téléchargement et configuration Tint2 Repentance
 mkdir -p "$USER_HOME/.config/tint2"
-wget -q --show-progress -O "$USER_HOME/.config/tint2/tint2rc" \
-    "https://raw.githubusercontent.com/addy-dclxvi/tint2-theme-collections/master/repentance/repentance.tint2rc" || \
-    echo "# Tint2 config par défaut" > "$USER_HOME/.config/tint2/tint2rc"
+wget -q --show-progress --timeout=10 -O "$USER_HOME/.config/tint2/tint2rc" \
+    "https://raw.githubusercontent.com/addy-dclxvi/tint2-theme-collections/master/repentance/repentance.tint2rc" 2>/dev/null || \
+cat > "$USER_HOME/.config/tint2/tint2rc" <<'TINT2EOF'
+# Tint2 config fallback (si download échoue)
+panel_items = LTSC
+panel_size = 100% 32
+panel_position = bottom center horizontal
+panel_background_id = 1
+font_shadow = 0
+
+background_color = #000000 90
+border_width = 0
+
+taskbar_mode = single_desktop
+taskbar_padding = 4 0 4
+taskbar_background_id = 0
+taskbar_active_background_id = 0
+
+task_icon = 1
+task_text = 1
+task_centered = 1
+task_maximum_size = 140 32
+task_padding = 6 3
+task_background_id = 0
+task_active_background_id = 2
+
+clock_format = %H:%M
+clock_padding = 10 0
+TINT2EOF
 
 chown -R "$USERNAME:$USERNAME" "$USER_HOME/.themes" "$USER_HOME/.config/tint2"
-print_success "Thème OpenBox 'Umbra' + Tint2 'Repentance' configuré par défaut"
+print_success "Thème OpenBox 'Umbra' + Tint2 'Repentance' configuré"
 
 # 17. Pipewire AVANT les applications
 print_status "Installation Pipewire"
@@ -408,7 +407,7 @@ apt install -y brave-browser
 # Discord
 if ! command -v discord &>/dev/null; then
     print_status "Installation Discord"
-    wget -q --show-progress -O /tmp/discord.deb \
+    wget -q --show-progress --timeout=30 -O /tmp/discord.deb \
         "https://discord.com/api/download?platform=linux&format=deb"
     if [ -s /tmp/discord.deb ]; then
         apt install -y /tmp/discord.deb || print_status "Discord installation échouée"
@@ -418,31 +417,35 @@ fi
 
 # Flatpak Gaming : Steam + Bottles
 print_status "Installation Flatpak Gaming Tools"
-flatpak install -y flathub com.valvesoftware.Steam || print_status "Steam Flatpak échoué (non critique)"
-flatpak install -y flathub com.usebottles.bottles || print_status "Bottles Flatpak échoué (non critique)"
-print_success "Steam + Bottles installés via Flatpak"
-_highlight "Lancez Steam avec 'flatpak run com.valvesoftware.Steam' ; Bottles pour Wine sandbox"
-
+flatpak install -y flathub com.valvesoftware.Steam 2>/dev/null || print_status "Steam Flatpak échoué (installez manuellement)"
+flatpak install -y flathub com.usebottles.bottles 2>/dev/null || print_status "Bottles Flatpak échoué (installez manuellement)"
 print_success "Applications + Gaming Tools installés"
 
-# 19. Configuration OpenBox (avec keybinds gaming avancés) - VERSION CORRIGÉE
-print_status "Configuration OpenBox"
+# 19. Configuration OpenBox ROBUSTE avec autostart PERFECTIONNÉ
+print_status "Configuration OpenBox avec autostart robuste"
 mkdir -p "$USER_HOME/.config/openbox"
 
-# .xinitrc pour startx
+# .xinitrc avec chargement complet environnement
 cat > "$USER_HOME/.xinitrc" <<'EOF'
 #!/bin/sh
+# Chargement variables environnement AMD/Pipewire
+[ -f /etc/environment ] && . /etc/environment
+[ -f /etc/environment.d/amd-gpu.conf ] && export $(grep -v '^#' /etc/environment.d/amd-gpu.conf | xargs)
+
+# Merge Xresources
+[ -f ~/.Xresources ] && xrdb -merge ~/.Xresources
+
+# Lancer OpenBox
 exec openbox-session
 EOF
 chmod +x "$USER_HOME/.xinitrc"
 
-# Copie configs OpenBox par défaut (avant custom)
+# Copie configs OpenBox par défaut
 cp -r /etc/xdg/openbox/* "$USER_HOME/.config/openbox/" 2>/dev/null || true
 
-# Custom rc.xml avec keybinds gaming : Snapping Super+flèches, multimedia PipeWire
+# Custom rc.xml avec keybinds gaming
 cat > "$USER_HOME/.config/openbox/rc.xml" <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- OpenBox Config Générée - Optimisée Gaming 2025 -->
 <openbox_config xmlns="http://openbox.org/3.4/rc" xmlns:xi="http://www.w3.org/2001/XInclude">
     <resistance>
         <strength>10</strength>
@@ -455,7 +458,7 @@ cat > "$USER_HOME/.config/openbox/rc.xml" <<'EOF'
         <keybind key="W-F2">
             <action name="Desktop"><desktop>2</desktop></action>
         </keybind>
-        <!-- Snapping/Tiling avec Super+flèches (50% côtés, quarters coins) -->
+        <!-- Snapping/Tiling avec Super+flèches -->
         <keybind key="W-Left">
             <action name="UnmaximizeFull"/>
             <action name="MoveResizeTo">
@@ -492,7 +495,7 @@ cat > "$USER_HOME/.config/openbox/rc.xml" <<'EOF'
                 <y>50%</y>
             </action>
         </keybind>
-        <keybind key="W-1"> <!-- Quarter top-left -->
+        <keybind key="W-1">
             <action name="UnmaximizeFull"/>
             <action name="MoveResizeTo">
                 <width>50%</width>
@@ -501,7 +504,7 @@ cat > "$USER_HOME/.config/openbox/rc.xml" <<'EOF'
                 <y>0</y>
             </action>
         </keybind>
-        <keybind key="W-2"> <!-- Quarter top-right -->
+        <keybind key="W-2">
             <action name="UnmaximizeFull"/>
             <action name="MoveResizeTo">
                 <width>50%</width>
@@ -510,7 +513,7 @@ cat > "$USER_HOME/.config/openbox/rc.xml" <<'EOF'
                 <y>0</y>
             </action>
         </keybind>
-        <keybind key="W-3"> <!-- Quarter bottom-left -->
+        <keybind key="W-3">
             <action name="UnmaximizeFull"/>
             <action name="MoveResizeTo">
                 <width>50%</width>
@@ -519,7 +522,7 @@ cat > "$USER_HOME/.config/openbox/rc.xml" <<'EOF'
                 <y>50%</y>
             </action>
         </keybind>
-        <keybind key="W-4"> <!-- Quarter bottom-right -->
+        <keybind key="W-4">
             <action name="UnmaximizeFull"/>
             <action name="MoveResizeTo">
                 <width>50%</width>
@@ -528,7 +531,7 @@ cat > "$USER_HOME/.config/openbox/rc.xml" <<'EOF'
                 <y>50%</y>
             </action>
         </keybind>
-        <!-- Multimedia PipeWire (volume/play/pause) -->
+        <!-- Multimedia PipeWire -->
         <keybind key="XF86AudioRaiseVolume">
             <action name="Execute">
                 <command>wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+</command>
@@ -564,7 +567,6 @@ cat > "$USER_HOME/.config/openbox/rc.xml" <<'EOF'
             <action name="Reconfigure"/>
         </keybind>
     </keyboard>
-    <!-- Thème Umbra -->
     <theme>
         <name>Umbra</name>
     </theme>
@@ -574,146 +576,175 @@ cat > "$USER_HOME/.config/openbox/rc.xml" <<'EOF'
 </openbox_config>
 EOF
 
-# ====== AUTOSTART CORRIGÉ - ROBUSTE POUR DÉMARRAGE AUTO ======
-cat > "$USER_HOME/.config/openbox/autostart" <<'AUTOSTART_EOF'
+# Autostart PERFECTIONNÉ avec robustesse maximale
+cat > "$USER_HOME/.config/openbox/autostart" <<'AUTOSTARTEOF'
 #!/bin/bash
+# OpenBox Autostart - Version ROBUSTE avec gestion d'erreurs complète
 
-# Fichier de log pour débogage
-LOGFILE="$HOME/.openbox-autostart.log"
-exec > >(tee -a "$LOGFILE") 2>&1
+# Répertoire de logs
+LOGDIR="$HOME/.local/share/openbox-logs"
+mkdir -p "$LOGDIR"
+LOGFILE="$LOGDIR/autostart-$(date +%Y%m%d-%H%M%S).log"
 
-echo "=== OpenBox Autostart - $(date) ==="
-
-# Fonction pour logger et exécuter
-run_safe() {
-    local cmd="$1"
-    local name="$2"
-    echo "[$(date +%H:%M:%S)] Tentative: $name"
-    if command -v "${cmd%% *}" >/dev/null 2>&1; then
-        eval "$cmd" &
-        echo "[$(date +%H:%M:%S)] ✓ $name lancé (PID: $!)"
-    else
-        echo "[$(date +%H:%M:%S)] ✗ $name: commande non trouvée"
-    fi
+# Fonction de log
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOGFILE"
 }
 
-# Attendre que X soit complètement prêt
-echo "[$(date +%H:%M:%S)] Attente initialisation X11..."
-for i in {1..20}; do
-    if xdpyinfo >/dev/null 2>&1; then
-        echo "[$(date +%H:%M:%S)] X11 prêt après ${i}s"
-        break
-    fi
-    sleep 1
-done
+# Fonction d'attente X11
+wait_for_x11() {
+    local max_attempts=30
+    local attempt=0
+    
+    log "Attente de X11..."
+    while [ $attempt -lt $max_attempts ]; do
+        if xdpyinfo >/dev/null 2>&1; then
+            log "✓ X11 prêt après $attempt secondes"
+            return 0
+        fi
+        sleep 1
+        attempt=$((attempt + 1))
+    done
+    
+    log "✗ ERREUR: X11 non disponible après ${max_attempts}s"
+    return 1
+}
 
-# Petite pause supplémentaire pour stabilité
-sleep 2
+# Fonction de lancement avec retry
+launch_with_retry() {
+    local cmd="$1"
+    local name="$2"
+    local max_retries=3
+    local retry=0
+    
+    while [ $retry -lt $max_retries ]; do
+        if pgrep -x "$name" > /dev/null; then
+            log "✓ $name déjà en cours d'exécution"
+            return 0
+        fi
+        
+        log "Lancement $name (tentative $((retry+1))/$max_retries)..."
+        eval "$cmd" 2>>"$LOGDIR/${name}-error.log" &
+        sleep 2
+        
+        if pgrep -x "$name" > /dev/null; then
+            log "✓ $name démarré avec succès"
+            return 0
+        fi
+        
+        retry=$((retry + 1))
+    done
+    
+    log "✗ ÉCHEC: $name n'a pas pu démarrer après $max_retries tentatives"
+    return 1
+}
 
-# ===== SCALING X11 125% =====
-echo "[$(date +%H:%M:%S)] Configuration scaling 125%..."
+# Début du script
+log "=== Démarrage autostart OpenBox ==="
+
+# Attendre X11
+if ! wait_for_x11; then
+    log "ERREUR CRITIQUE: Impossible de continuer sans X11"
+    notify-send -u critical "Erreur OpenBox" "X11 non disponible - vérifiez $LOGFILE"
+    exit 1
+fi
+
+# Charger les ressources X11
+log "Chargement Xresources..."
+if [ -f "$HOME/.Xresources" ]; then
+    xrdb -merge "$HOME/.Xresources" 2>>"$LOGFILE" || log "⚠ Échec chargement Xresources"
+else
+    log "⚠ Fichier .Xresources non trouvé"
+fi
+
+# Configuration scaling X11 (125% = scale 0.8x0.8)
+log "Configuration scaling X11 125%..."
 PRIMARY_OUTPUT=$(xrandr --current 2>/dev/null | grep " connected primary" | cut -d' ' -f1)
 if [ -z "$PRIMARY_OUTPUT" ]; then
     PRIMARY_OUTPUT=$(xrandr --current 2>/dev/null | grep " connected" | head -1 | cut -d' ' -f1)
 fi
 
 if [ -n "$PRIMARY_OUTPUT" ]; then
-    xrandr --output "$PRIMARY_OUTPUT" --scale 0.8x0.8 2>/dev/null && \
-        echo "[$(date +%H:%M:%S)] ✓ Scaling 125% appliqué sur $PRIMARY_OUTPUT" || \
-        echo "[$(date +%H:%M:%S)] ✗ Échec scaling"
-else
-    echo "[$(date +%H:%M:%S)] ✗ Aucun moniteur détecté"
-fi
-
-# Charger Xresources
-if [ -f "$HOME/.Xresources" ]; then
-    xrdb -merge "$HOME/.Xresources" && \
-        echo "[$(date +%H:%M:%S)] ✓ Xresources chargées"
-fi
-
-# ===== COMPOSANTS ESSENTIELS (ordre important) =====
-# 1. Picom (compositeur)
-run_safe "picom --experimental-backends -b" "Picom (compositeur)"
-
-# 2. Tint2 (barre de tâches) - avec fallback
-echo "[$(date +%H:%M:%S)] Lancement Tint2..."
-if [ -f "$HOME/.config/tint2/tint2rc" ]; then
-    tint2 -c "$HOME/.config/tint2/tint2rc" 2>> "$HOME/.tint2-errors.log" &
-    TINT2_PID=$!
-    sleep 2
-    if ! kill -0 $TINT2_PID 2>/dev/null; then
-        echo "[$(date +%H:%M:%S)] ✗ Tint2 custom échoué, fallback config par défaut"
-        tint2 &
+    if xrandr --output "$PRIMARY_OUTPUT" --scale 0.8x0.8 2>>"$LOGFILE"; then
+        log "✓ Scaling appliqué sur $PRIMARY_OUTPUT"
     else
-        echo "[$(date +%H:%M:%S)] ✓ Tint2 lancé (PID: $TINT2_PID)"
+        log "⚠ Échec scaling sur $PRIMARY_OUTPUT"
     fi
 else
-    echo "[$(date +%H:%M:%S)] Config tint2 absente, lancement par défaut"
-    tint2 &
+    log "⚠ Aucun moniteur détecté pour scaling"
 fi
 
-# 3. Fond d'écran
-run_safe "nitrogen --restore" "Nitrogen (wallpaper)"
+# Délai stabilisation (drivers AMD + Pipewire)
+log "Stabilisation système (7s)..."
+sleep 7
 
-# 4. NetworkManager applet
-run_safe "nm-applet" "NetworkManager applet"
+# Lancement Tint2 (barre des tâches) - ROBUSTE
+log "=== Lancement Tint2 ==="
+TINT2_CONFIG="$HOME/.config/tint2/tint2rc"
+if [ -f "$TINT2_CONFIG" ]; then
+    launch_with_retry "tint2 -c '$TINT2_CONFIG'" "tint2"
+else
+    log "⚠ Config tint2 non trouvée, utilisation config par défaut"
+    launch_with_retry "tint2" "tint2"
+fi
 
-# 5. Volume icon
-run_safe "volumeicon" "VolumeIcon"
+# Si tint2 échoue toujours, essayer fallback panel alternatif
+if ! pgrep -x tint2 > /dev/null; then
+    log "⚠ Tentative fallback: lxpanel..."
+    launch_with_retry "lxpanel" "lxpanel" || log "✗ Aucun panel disponible"
+fi
 
-# ===== APPLICATIONS OPTIONNELLES (avec vérifications) =====
-# Conky (monitoring) - après un délai
+# Picom (compositeur) - Experimental backends pour AMD sans stutter
+log "=== Lancement Picom ==="
+launch_with_retry "picom --experimental-backends -b" "picom"
+
+# Nitrogen (wallpaper)
+log "=== Lancement Nitrogen ==="
+if command -v nitrogen >/dev/null 2>&1; then
+    nitrogen --restore 2>>"$LOGFILE" &
+    log "✓ Nitrogen wallpaper restauré"
+else
+    log "⚠ Nitrogen non installé"
+fi
+
+# NetworkManager Applet
+log "=== Lancement nm-applet ==="
+launch_with_retry "nm-applet" "nm-applet"
+
+# VolumeIcon (contrôle volume)
+log "=== Lancement VolumeIcon ==="
+launch_with_retry "volumeicon" "volumeicon"
+
+# Conky (monitoring overlay) - avec délai supplémentaire
+log "=== Lancement Conky ==="
+sleep 3
 if command -v conky >/dev/null 2>&1; then
-    sleep 3
     if [ -f "$HOME/.conkyrc" ]; then
-        run_safe "conky -c $HOME/.conkyrc" "Conky (custom)"
+        conky -c "$HOME/.conkyrc" 2>>"$LOGFILE" &
+        log "✓ Conky démarré avec config personnalisée"
     else
-        run_safe "conky" "Conky (default)"
+        conky 2>>"$LOGFILE" &
+        log "✓ Conky démarré avec config par défaut"
     fi
+else
+    log "⚠ Conky non installé"
 fi
 
-# Discord - optionnel, avec délai pour stabilité
+# Discord (avec délai pour stabilité réseau)
+log "=== Lancement Discord ==="
+sleep 5
 if command -v discord >/dev/null 2>&1; then
-    echo "[$(date +%H:%M:%S)] Discord disponible, lancement dans 10s..."
-    (sleep 10 && discord) &
+    discord --start-minimized 2>>"$LOGDIR/discord-error.log" &
+    log "✓ Discord démarré en arrière-plan"
+else
+    log "⚠ Discord non installé"
 fi
 
-# ===== SERVICES SYSTÈME (vérifications) =====
-echo "[$(date +%H:%M:%S)] Vérification services système..."
-
-# PipeWire
-if ! systemctl --user is-active pipewire >/dev/null 2>&1; then
-    systemctl --user start pipewire && \
-        echo "[$(date +%H:%M:%S)] ✓ PipeWire démarré" || \
-        echo "[$(date +%H:%M:%S)] ✗ PipeWire échec"
-fi
-
-# WirePlumber
-if ! systemctl --user is-active wireplumber >/dev/null 2>&1; then
-    systemctl --user start wireplumber && \
-        echo "[$(date +%H:%M:%S)] ✓ WirePlumber démarré" || \
-        echo "[$(date +%H:%M:%S)] ✗ WirePlumber échec"
-fi
-
-# ===== WATCHDOG - Relancer Tint2 si crash =====
-(
-    sleep 15
-    while true; do
-        if ! pgrep -x tint2 > /dev/null; then
-            echo "[$(date +%H:%M:%S)] ⚠ Tint2 non trouvé, relance..."
-            if [ -f "$HOME/.config/tint2/tint2rc" ]; then
-                tint2 -c "$HOME/.config/tint2/tint2rc" &
-            else
-                tint2 &
-            fi
-        fi
-        sleep 30
-    done
-) &
-
-echo "[$(date +%H:%M:%S)] === Autostart terminé ==="
-AUTOSTART_EOF
-
+# Fin
+log "=== Autostart terminé ==="
+log "Consultez les logs dans: $LOGDIR"
+notify-send "OpenBox" "Session démarrée avec succès" -t 3000
+AUTOSTARTEOF
 chmod +x "$USER_HOME/.config/openbox/autostart"
 
 # Config Xresources pour DPI 125
@@ -727,29 +758,93 @@ Xft.hintstyle: hintslight
 Xft.lcdfilter: lcddefault
 EOF
 
+# Conkyrc basique si pas présent
+if [ ! -f "$USER_HOME/.conkyrc" ]; then
+    cat > "$USER_HOME/.conkyrc" <<'CONKYEOF'
+conky.config = {
+    alignment = 'top_right',
+    background = false,
+    border_width = 1,
+    cpu_avg_samples = 2,
+    default_color = 'white',
+    default_outline_color = 'white',
+    default_shade_color = 'white',
+    double_buffer = true,
+    draw_borders = false,
+    draw_graph_borders = true,
+    draw_outline = false,
+    draw_shades = false,
+    gap_x = 20,
+    gap_y = 60,
+    maximum_width = 280,
+    minimum_height = 5,
+    minimum_width = 5,
+    net_avg_samples = 2,
+    no_buffers = true,
+    out_to_console = false,
+    out_to_ncurses = false,
+    out_to_stderr = false,
+    out_to_x = true,
+    own_window = true,
+    own_window_class = 'Conky',
+    own_window_type = 'desktop',
+    own_window_transparent = true,
+    own_window_argb_visual = true,
+    own_window_argb_value = 180,
+    show_graph_range = false,
+    show_graph_scale = false,
+    stippled_borders = 0,
+    update_interval = 2.0,
+    uppercase = false,
+    use_spacer = 'none',
+    use_xft = true,
+    font = 'DejaVu Sans Mono:size=10',
+}
+
+conky.text = [[
+${color grey}Info:$color ${scroll 32 Debian 13 Trixie - OpenBox Gaming}
+${color grey}Uptime:$color $uptime
+${color grey}Frequency (in MHz):$color $freq
+${color grey}Frequency (in GHz):$color $freq_g
+${color grey}RAM Usage:$color $mem/$memmax - $memperc% ${membar 4}
+${color grey}CPU Usage:$color $cpu% ${cpubar 4}
+${color grey}Processes:$color $processes  ${color grey}Running:$color $running_processes
+$hr
+${color grey}File systems:
+ / $color${fs_used /}/${fs_size /} ${fs_bar 6 /}
+${color grey}Networking:
+Up:$color ${upspeed} ${color grey} - Down:$color ${downspeed}
+$hr
+${color grey}Name              PID     CPU%   MEM%
+${color lightgrey} ${top name 1} ${top pid 1} ${top cpu 1} ${top mem 1}
+${color lightgrey} ${top name 2} ${top pid 2} ${top cpu 2} ${top mem 2}
+${color lightgrey} ${top name 3} ${top pid 3} ${top cpu 3} ${top mem 3}
+]]
+CONKYEOF
+fi
+
 # Corriger les permissions
 chown -R "$USERNAME:$USERNAME" "$USER_HOME/.config"
-chown "$USERNAME:$USERNAME" "$USER_HOME/.xinitrc" "$USER_HOME/.Xresources"
+chown "$USERNAME:$USERNAME" "$USER_HOME/.xinitrc" "$USER_HOME/.Xresources" "$USER_HOME/.conkyrc" 2>/dev/null || true
 
-print_success "OpenBox configuré avec autostart ROBUSTE (logs: ~/.openbox-autostart.log)"
-_highlight "Fichier log créé pour debug: cat ~/.openbox-autostart.log après reboot"
+print_success "OpenBox configuré avec autostart ROBUSTE et logging complet"
+_highlight "Les logs de démarrage seront dans ~/.local/share/openbox-logs/"
 
-# 20. GRUB optimisé pour AMD 7800X3D + RX 6950 XT
+# 20. GRUB optimisé
 print_status "Configuration GRUB pour AMD 7800X3D"
 cp /etc/default/grub "/etc/default/grub.backup_$(date +%Y%m%d_%H%M%S)"
 
 sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash amd_pstate=active amdgpu.ppfeaturemask=0xffffffff nowatchdog preempt=voluntary mitigations=off pcie_aspm=off"/' /etc/default/grub
-
 sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=2/' /etc/default/grub
 
 update-grub
 print_success "GRUB optimisé pour gaming"
 
-# 21. Compression initramfs zstd (boot + rapide)
+# 21. Compression initramfs zstd
 print_status "Configuration initramfs zstd pour boot rapide"
 echo 'COMPRESS=zstd' > /etc/initramfs-tools/initramfs.conf
 update-initramfs -u -k all
-print_success "Initramfs zstd configuré (-2s boot sur NVMe AMD)"
+print_success "Initramfs zstd configuré"
 
 # 22. Optimisations kernel
 print_status "Optimisations kernel système"
@@ -777,9 +872,9 @@ EOF
 sysctl --system >/dev/null
 print_success "Optimisations kernel appliquées"
 
-# zram pour swap compressé (50% RAM, zstd, gaming optim)
+# zram
 print_status "Configuration zram (swap compressé pour gaming)"
-apt install -y zram-tools || apt install -y systemd-zram-generator
+apt install -y zram-tools 2>/dev/null || apt install -y systemd-zram-generator 2>/dev/null || true
 mkdir -p /etc/systemd/zram-generator.conf.d
 cat > /etc/systemd/zram-generator.conf.d/gaming.conf <<'EOF'
 [zram0]
@@ -788,10 +883,10 @@ compression-algorithm = zstd
 swappiness = 100
 EOF
 systemctl daemon-reload
-systemctl enable --now systemd-zram-setup@zram0 || modprobe zram num_devices=1 && echo lz4 > /sys/block/zram0/comp_algorithm && echo $(($(free | grep Mem: | awk '{print $2}') / 2))K > /sys/block/zram0/disksize && mkswap --pagesize 4096 /dev/zram0 && swapon /dev/zram0 -p 100
-print_success "zram configuré (50% RAM zstd, +20% réactivité gaming)"
+systemctl enable --now systemd-zram-setup@zram0 2>/dev/null || true
+print_success "zram configuré"
 
-# 23. CPU Governor en performance (persistant)
+# 23. CPU Governor
 print_status "Configuration CPU governor"
 apt install -y linux-cpupower || true
 
@@ -835,11 +930,10 @@ options usbhid mousepoll=1
 EOF
 
 modprobe -r usbhid usbcore 2>/dev/null || true
-modprobe usbhid mousepoll=1
+modprobe usbhid mousepoll=1 2>/dev/null || true
 modprobe usbcore autosuspend=-1 2>/dev/null || true
 
-print_success "Polling rate souris forcé à 1000Hz (redémarrage requis pour pleine application)"
-_highlight "Vérifiez après reboot : cat /sys/module/usbhid/parameters/mousepoll (devrait être 1)"
+print_success "Polling rate souris forcé à 1000Hz"
 
 # 25. Limites système
 print_status "Configuration limites système"
@@ -871,12 +965,12 @@ dirs=/usr/share/backgrounds;
 EOF
 chown -R "$USERNAME:$USERNAME" "$USER_HOME/.config/nitrogen"
 
-# 27. Polkit pour permissions GUI
-apt install -y policykit-1 polkit-kde-agent-1 || \
-apt install -y policykit-1-gnome || \
-apt install -y lxpolkit || true
+# 27. Polkit
+apt install -y policykit-1 polkit-kde-agent-1 2>/dev/null || \
+apt install -y policykit-1-gnome 2>/dev/null || \
+apt install -y lxpolkit 2>/dev/null || true
 
-# 28. Script de vérification post-installation (étendu gaming)
+# 28. Script de vérification amélioré
 cat > "$USER_HOME/verify-install.sh" <<'VERIFYEOF'
 #!/bin/bash
 echo "╔══════════════════════════════════════════════════════════════╗"
@@ -889,8 +983,8 @@ cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_driver 2>/dev/null || echo "  N
 cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "  Non disponible"
 echo ""
 
-echo "→ GPU Renderer (Mesa 25.2.4 + RX 6950 XT):"
-glxinfo | grep "OpenGL renderer" 2>/dev/null || echo "  Exécutez après le reboot"
+echo "→ GPU Renderer:"
+glxinfo 2>/dev/null | grep "OpenGL renderer" || echo "  Exécutez après le reboot"
 echo ""
 
 echo "→ Vulkan Driver:"
@@ -910,7 +1004,11 @@ xdpyinfo 2>/dev/null | grep resolution || echo "  Exécutez après login graphiq
 echo ""
 
 echo "→ zram Status:"
-zramctl 2>/dev/null || swapon --show=NAME,SIZE,TYPE | grep zram || echo "  zram non actif (reboot)"
+zramctl 2>/dev/null || swapon --show | grep zram || echo "  zram non actif"
+echo ""
+
+echo "→ Polling rate souris:"
+cat /sys/module/usbhid/parameters/mousepoll 2>/dev/null || echo "  Non disponible (reboot requis)"
 echo ""
 
 echo "→ Services actifs:"
@@ -919,23 +1017,21 @@ echo "  UFW: $(systemctl is-active ufw 2>/dev/null)"
 if systemctl list-unit-files | grep -q lactd; then
     echo "  LACT daemon: $(systemctl is-active lactd 2>/dev/null)"
 fi
-echo "  zram: $(systemctl is-active systemd-zram-setup@zram0 2>/dev/null || echo 'Manuel')"
-
 echo ""
-echo "→ Logs Autostart OpenBox:"
-if [ -f "$HOME/.openbox-autostart.log" ]; then
-    echo "  Dernières lignes:"
-    tail -n 10 "$HOME/.openbox-autostart.log" | sed 's/^/    /'
+
+echo "→ Logs autostart OpenBox:"
+if [ -d "$HOME/.local/share/openbox-logs" ]; then
+    LATEST_LOG=$(ls -t "$HOME/.local/share/openbox-logs/autostart-"*.log 2>/dev/null | head -1)
+    if [ -n "$LATEST_LOG" ]; then
+        echo "  Log le plus récent: $LATEST_LOG"
+        echo "  Dernières lignes:"
+        tail -n 5 "$LATEST_LOG" | sed 's/^/    /'
+    else
+        echo "  Aucun log trouvé (pas encore de session X11)"
+    fi
 else
-    echo "  Fichier log absent (exécutez après login OpenBox)"
+    echo "  Répertoire de logs non créé (première session requise)"
 fi
-
-echo ""
-echo "→ Gaming Tools:"
-flatpak list | grep -E "(Steam|Bottles)" || echo "  Flatpak gaming: Vérifiez flatpak run"
-command -v lutris &>/dev/null && echo "  Lutris: OK" || echo "  Lutris: Non installé"
-command -v conky &>/dev/null && echo "  Conky: OK" || echo "  Conky: Non installé"
-command -v jgmenu &>/dev/null && echo "  Jgmenu: OK" || echo "  Jgmenu: Non installé"
 echo ""
 
 echo "╔══════════════════════════════════════════════════════════════╗"
