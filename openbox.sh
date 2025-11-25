@@ -73,7 +73,7 @@ print_success "Outils de base installés"
 
 # 4. GUI de base : Xorg + OpenBox
 print_status "Installation Xorg + OpenBox"
-apt install -y xorg openbox obconf lxappearance xinit xterm x11-utils
+apt install -y xorg openbox obconf lxappearance xinit xterm x11-utils pcmanfm
 print_success "Environnement graphique installé"
 
 # 5. Pilotes AMD pour RX 6950 XT (Mesa + Firmware)
