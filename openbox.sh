@@ -283,12 +283,6 @@ apt purge -y snapd 2>/dev/null || true
 rm -rf /snap /var/snap /var/lib/snapd /root/snap "$USER_HOME/snap" 2>/dev/null || true
 print_success "Snap supprimé"
 
-# 16. Display Manager LightDM
-print_status "Installation LightDM"
-apt install -y lightdm lightdm-gtk-greeter lightdm-gtk-greeter-settings
-systemctl enable lightdm
-print_success "LightDM installé"
-
 # 17. Thèmes
 print_status "Installation thèmes"
 apt install -y arc-theme papirus-icon-theme fonts-noto fonts-noto-color-emoji \
