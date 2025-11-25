@@ -342,6 +342,74 @@ exec openbox-session
 EOF
 chmod +x "$USER_HOME/.xinitrc"
 
+# Autostart avec Scaling X11 125% + tint2 forcé robuste
+cat > "$USER_HOME/.config/openbox/autostart" <<'EOF'
+#!/bin/sh
+
+# Attendre que X soit prêt
+sleep 5  # Augmenté pour stabilité (drivers AMD/Pipewire)
+
+# Scaling X11 125% sans flou : scale 0.8x0.8 (1/1.25 = 0.8)
+# Détection du moniteur principal
+PRIMARY_OUTPUT=$(xrandr --current | grep " connected primary" | cut -d' ' -f1)
+if [ -z "$PRIMARY_OUTPUT" ]; then
+    PRIMARY_OUTPUT=$(xrandr --current | grep " connected" | head -1 | cut -d' ' -f1)
+fi
+
+if [ -n "$PRIMARY_OUTPUT" ]; then
+    xrandr --output "$PRIMARY_OUTPUT" --scale 0.8x0.8
+fi
+
+# Charger les ressources X (DPI, fonts)
+[ -f ~/.Xresources ] && xrdb -merge ~/.Xresources
+
+# Fonction wrapper pour tint2 (forcé, avec retry et logs)
+launch_tint2() {
+    if ! pgrep -x tint2 > /dev/null; then
+        tint2 -c ~/.config/tint2/tint2rc 2>> ~/.tint2-errors.log &
+        sleep 2
+        if ! pgrep -x tint2 > /dev/null; then
+            echo "Tint2 failed, trying default..." >> ~/.tint2-errors.log
+            tint2 &  # Fallback sans config
+        fi
+    fi
+}
+
+# Lancer les composants
+launch_tint2  # Tint2 forcé en premier
+picom -b &
+nitrogen --restore &
+nm-applet &
+volumeicon &
+
+# Applications au démarrage (décommentez si nécessaire)
+# discord &
+# steam -silent &
+EOF
+chmod +x "$USER_HOME/.config/openbox/autostart"
+
+# Config Xresources pour DPI 125
+cat > "$USER_HOME/.Xresources" <<'EOF'
+! DPI 125% pour écran 2K 27"
+Xft.dpi: 125
+Xft.antialias: true
+Xft.hinting: true
+Xft.rgba: rgb
+Xft.hintstyle: hintslight
+Xft.lcdfilter: lcddefault
+EOF
+
+# Copie configs OpenBox par défaut
+cp -r /etc/xdg/openbox/* "$USER_HOME/.config/openbox/" 2>/dev/null || true
+
+# Corriger les permissions
+chown -R "$USERNAME:$USERNAME" "$USER_HOME/.config"
+chown "$USERNAME:$USERNAME" "$USER_HOME/.xinitrc"
+chown "$USERNAME:$USERNAME" "$USER_HOME/.Xresources"
+
+print_success "OpenBox configuré avec tint2 forcé et logs"
+_highlight "Logs tint2 : cat ~/.tint2-errors.log après reboot si toujours KO"
+
 # Autostart avec Scaling X11 125%
 cat > "$USER_HOME/.config/openbox/autostart" <<'EOF'
 #!/bin/sh
