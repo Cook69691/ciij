@@ -444,7 +444,26 @@ print_success "Optimisations kernel appliquées"
 
 # 23. CPU Governor en performance (persistant)
 print_status "Configuration CPU governor"
-apt install -y cpufrequtils linux-cpupower || true
+apt install -y linux-cpupower || true
+
+# Service systemd pour forcer performance au boot
+cat > /etc/systemd/system/cpu-performance.service <<'EOF'
+[Unit]
+Description=Set CPU governor to performance
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > $gov 2>/dev/null || true; done'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable cpu-performance.service
+print_success "CPU governor: performance"
 
 # Service systemd pour forcer performance au boot
 cat > /etc/systemd/system/cpu-performance.service <<'EOF'
