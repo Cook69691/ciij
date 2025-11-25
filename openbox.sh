@@ -516,6 +516,40 @@ apt install -y policykit-1 polkit-kde-agent-1 || \
 apt install -y policykit-1-gnome || \
 apt install -y lxpolkit || true
 
+# Ajoutez ce bloc de code juste après la section 4 (après print_success "Environnement graphique installé" et avant la section 5).
+
+print_status "Configuration clavier AZERTY pour Verr. Maj sur chiffres"
+
+# Modification du fichier /usr/share/X11/xkb/symbols/fr pour inclure mswindows-capslock
+if grep -q 'include "latin"' /usr/share/X11/xkb/symbols/fr; then
+    sed -i '/include "latin"/a include "mswindows-capslock"' /usr/share/X11/xkb/symbols/fr
+else
+    echo "AVERTISSEMENT : Fichier /usr/share/X11/xkb/symbols/fr non standard, inclusion manuelle requise."
+fi
+
+# Création du fichier /usr/share/X11/xkb/symbols/mswindows-capslock
+cat > /usr/share/X11/xkb/symbols/mswindows-capslock <<'EOF'
+// Replicate a "feature" of MS Windows on AZERTY keyboards
+// where Caps Lock also acts as a Shift Lock on number keys.
+// Include keys <AE01> to <AE10> in the FOUR_LEVEL_ALPHABETIC key type.
+
+partial alphanumeric_keys
+xkb_symbols "basic" {
+key <AE01> { type= "FOUR_LEVEL_ALPHABETIC", [ ampersand, 1, bar, exclamdown ] };
+key <AE02> { type= "FOUR_LEVEL_ALPHABETIC", [ eacute, 2, at, oneeighth ] };
+key <AE03> { type= "FOUR_LEVEL_ALPHABETIC", [ quotedbl, 3, numbersign, sterling ] };
+key <AE04> { type= "FOUR_LEVEL_ALPHABETIC", [apostrophe, 4, onequarter, dollar ] };
+key <AE05> { type= "FOUR_LEVEL_ALPHABETIC", [ parenleft, 5, onehalf, threeeighths ] };
+key <AE06> { type= "FOUR_LEVEL_ALPHABETIC", [ section, 6, asciicircum, fiveeighths ] };
+key <AE07> { type= "FOUR_LEVEL_ALPHABETIC", [ egrave, 7, braceleft, seveneighths ] };
+key <AE08> { type= "FOUR_LEVEL_ALPHABETIC", [ exclam, 8, bracketleft, trademark ] };
+key <AE09> { type= "FOUR_LEVEL_ALPHABETIC", [ ccedilla, 9, braceleft, plusminus ] };
+key <AE10> { type= "FOUR_LEVEL_ALPHABETIC", [ agrave, 0, braceright, degree ] };
+};
+EOF
+
+print_success "Configuration clavier Verr. Maj activée (redémarrage X11 requis pour appliquer)"
+
 # 28. Script de vérification post-installation
 cat > "$USER_HOME/verify-install.sh" <<'VERIFYEOF'
 #!/bin/bash
