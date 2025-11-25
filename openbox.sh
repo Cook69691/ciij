@@ -484,6 +484,52 @@ print_success "Watchdogs désactivés"
 print_status "Configuration limites système"
 tee -a /etc/security/limits.conf <<EOF >/dev/null
 
+# 28. Configuration Clavier AZERTY CapsLock (pour chiffres)
+print_status "Configuration AZERTY CapsLock (Verr. Maj pour chiffres)"
+FR_SYMBOLS_FILE="/usr/share/X11/xkb/symbols/fr"
+MSW_CAPS_FILE="/usr/share/X11/xkb/symbols/mswindows-capslock"
+
+# A. Modifier /usr/share/X11/xkb/symbols/fr
+if [ -f "$FR_SYMBOLS_FILE" ]; then
+    # 1. Créer un backup (au cas où)
+    cp "$FR_SYMBOLS_FILE" "${FR_SYMBOLS_FILE}.bak_$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
+    
+    # 2. Vérifier si la ligne existe déjà pour éviter les doublons
+    if ! grep -q 'include "mswindows-capslock"' "$FR_SYMBOLS_FILE"; then
+        # 3. Insérer la ligne après 'include "latin"'
+        sed -i '/include "latin"/a \    include "mswindows-capslock"' "$FR_SYMBOLS_FILE"
+        print_success "Fichier 'fr' (symbols) modifié"
+    else
+        _highlight "La configuration mswindows-capslock existe déjà dans 'fr'."
+    fi
+
+    # B. Créer /usr/share/X11/xkb/symbols/mswindows-capslock
+    cat > "$MSW_CAPS_FILE" <<'EOF'
+// Replicate a "feature" of MS Windows on AZERTY keyboards
+// where Caps Lock also acts as a Shift Lock on number keys.
+// Include keys <AE01> to <AE10> in the FOUR_LEVEL_ALPHABETIC key type.
+
+partial alphanumeric_keys
+xkb_symbols "basic" {
+    key <AE01>	{ type= "FOUR_LEVEL_ALPHABETIC", [ ampersand,          1,          bar,   exclamdown ]	};
+    key <AE02>	{ type= "FOUR_LEVEL_ALPHABETIC", [    eacute,          2,           at,    oneeighth ]	};
+    key <AE03>	{ type= "FOUR_LEVEL_ALPHABETIC", [  quotedbl,          3,   numbersign,     sterling ]	};
+    key <AE04>	{ type= "FOUR_LEVEL_ALPHABETIC", [apostrophe,          4,   onequarter,       dollar ]	};
+    key <AE05>	{ type= "FOUR_LEVEL_ALPHABETIC", [ parenleft,          5,      onehalf, threeeighths ]	};
+    key <AE06>	{ type= "FOUR_LEVEL_ALPHABETIC", [   section,          6,  asciicircum,  fiveeighths ]	};
+    key <AE07>	{ type= "FOUR_LEVEL_ALPHABETIC", [    egrave,          7,    braceleft, seveneighths ]	};
+    key <AE08>	{ type= "FOUR_LEVEL_ALPHABETIC", [    exclam,          8,  bracketleft,    trademark ]	};
+    key <AE09>	{ type= "FOUR_LEVEL_ALPHABETIC", [  ccedilla,          9,    braceleft,    plusminus ]	};
+    key <AE10>	{ type= "FOUR_LEVEL_ALPHABETIC", [    agrave,          0,   braceright,       degree ]	};
+};
+EOF
+    print_success "Fichier 'mswindows-capslock' créé"
+    print_success "Configuration AZERTY CapsLock appliquée (prend effet au reboot)"
+
+else
+    print_status "Fichier $FR_SYMBOLS_FILE non trouvé. Skip config AZERTY CapsLock."
+fi
+
 # Limites pour $USERNAME (gaming)
 $USERNAME soft nofile 524288
 $USERNAME hard nofile 524288
