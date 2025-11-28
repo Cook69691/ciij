@@ -340,6 +340,49 @@ fi
 
 print_status "Redémarrage de la session graphique nécessaire"
 
+# ========================================
+# 13. NETWORK OPTIMISATION
+# ========================================
+
+# --- Network tuning optimized for Fedora 43 (BBR + fq_codel + latency tweaks) ---
+print_status "Optimisation réseau Fedora 43 (BBR + fq_codel + faible latence)"
+
+# Charger BBR proprement (inutile mais safe)
+modprobe tcp_bbr 2>/dev/null || true
+echo "tcp_bbr" > /etc/modules-load.d/bbr.conf || true
+
+# Créer le fichier sysctl optimisé Fedora
+cat > /etc/sysctl.d/99-fedora-network.conf <<'EOF'
+# --- Congestion control + queue discipline ---
+net.ipv4.tcp_congestion_control = bbr
+net.core.default_qdisc = fq_codel
+
+# --- TCP performance & latency ---
+net.ipv4.tcp_fastopen = 3
+net.ipv4.tcp_slow_start_after_idle = 0
+net.ipv4.tcp_mtu_probing = 1
+
+# --- Buffers optimisés pour latence stable (pas énorme pour éviter le bufferbloat) ---
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+net.ipv4.tcp_rmem = 4096 262144 16777216
+net.ipv4.tcp_wmem = 4096 262144 16777216
+
+# --- Amélioration files d’attente kernel ---
+net.core.netdev_max_backlog = 25000
+net.core.somaxconn = 1024
+EOF
+
+sysctl --system || print_warn "sysctl --system échoué (non critique)"
+
+# --- Optimisation buffers NIC ---
+NIC="$(ip route | awk '/default/ {print $5; exit}')"
+if [ -n "$NIC" ]; then
+    ethtool -G "$NIC" rx 4096 tx 4096 2>/dev/null \
+        || print_warn "Impossible de modifier les buffers NIC (non critique)"
+fi
+
+print_success "Optimisations réseau Fedora 43 appliquées"
 
 # ========================================
 # FINALISATION
