@@ -460,69 +460,74 @@ fi
 echo_info "✓ cpupower installé (amd_pstate gère déjà les performances CPU)"
 
 # ========================================
-# 13. CONFIGURATION CLAVIER AZERTY PERSONNALISÉ
+# 13. CONFIGURATION CLAVIER AZERTY PERSONNALISÉ (TKL - CapsLock = chiffres)
 # ========================================
-echo_info "Configuration clavier AZERTY (patch minimal)..."
+echo_info "Configuration clavier AZERTY pour TKL (CapsLock active les chiffres)..."
 
-# 1. Vérifier si le fichier XKB français existe
+# SOLUTION 1 : Modification XKB personnalisée (recommandée)
 if [ -f /usr/share/X11/xkb/symbols/fr ]; then
     
-    # 2. Créer le fichier mswindows-capslock personnalisé
-    echo_info "Installation du layout clavier personnalisé..."
+    echo_info "Installation du layout clavier mswindows-capslock..."
     cat > /usr/share/X11/xkb/symbols/mswindows-capslock <<'EOF'
-// Minimal safe mswindows-capslock snippet (CapsLock gives numbers on TKL)
+// TKL-compatible AZERTY: CapsLock enables numbers (Windows behavior)
 partial alphanumeric_keys
 xkb_symbols "basic" {
-    key <AE01> { [ ampersand, 1, bar, exclamdown ] };
-    key <AE02> { [ eacute, 2, at, oneeighth ] };
-    key <AE03> { [ quotedbl, 3, numbersign, sterling ] };
-    key <AE04> { [ apostrophe, 4, onequarter, dollar ] };
-    key <AE05> { [ parenleft, 5, braceleft, threequarters ] };
-    key <AE06> { [ minus, 6, asciicircum, threequarters ] };
-    key <AE07> { [ egrave, 7, grave, fiveeighths ] };
-    key <AE08> { [ underscore, 8, backslash, trademark ] };
-    key <AE09> { [ ccedilla, 9, asciicircum, plusminus ] };
-    key <AE10> { [ agrave, 0, at, degree ] };
+    // Type FOUR_LEVEL_ALPHABETIC makes CapsLock work on these keys
+    key <AE01> { type[Group1]= "FOUR_LEVEL_ALPHABETIC", symbols[Group1]= [ ampersand, 1, bar, exclamdown ] };
+    key <AE02> { type[Group1]= "FOUR_LEVEL_ALPHABETIC", symbols[Group1]= [ eacute, 2, at, oneeighth ] };
+    key <AE03> { type[Group1]= "FOUR_LEVEL_ALPHABETIC", symbols[Group1]= [ quotedbl, 3, numbersign, sterling ] };
+    key <AE04> { type[Group1]= "FOUR_LEVEL_ALPHABETIC", symbols[Group1]= [ apostrophe, 4, onequarter, dollar ] };
+    key <AE05> { type[Group1]= "FOUR_LEVEL_ALPHABETIC", symbols[Group1]= [ parenleft, 5, braceleft, threequarters ] };
+    key <AE06> { type[Group1]= "FOUR_LEVEL_ALPHABETIC", symbols[Group1]= [ minus, 6, asciicircum, threequarters ] };
+    key <AE07> { type[Group1]= "FOUR_LEVEL_ALPHABETIC", symbols[Group1]= [ egrave, 7, grave, fiveeighths ] };
+    key <AE08> { type[Group1]= "FOUR_LEVEL_ALPHABETIC", symbols[Group1]= [ underscore, 8, backslash, trademark ] };
+    key <AE09> { type[Group1]= "FOUR_LEVEL_ALPHABETIC", symbols[Group1]= [ ccedilla, 9, asciicircum, plusminus ] };
+    key <AE10> { type[Group1]= "FOUR_LEVEL_ALPHABETIC", symbols[Group1]= [ agrave, 0, at, degree ] };
 };
 EOF
     
-    # 3. Ajouter l'inclusion dans le fichier fr (si pas déjà présente)
-    if ! grep -q "mswindows-capslock" /usr/share/X11/xkb/symbols/fr; then
-        echo_info "Ajout de l'inclusion mswindows-capslock dans le fichier fr..."
-        sed -i '/include "latin"/a include "mswindows-capslock"' /usr/share/X11/xkb/symbols/fr || true
+    # Ajouter l'inclusion dans le fichier fr (si pas déjà présente)
+    if ! grep -q 'include "mswindows-capslock"' /usr/share/X11/xkb/symbols/fr; then
+        echo_info "Ajout de l'inclusion dans le fichier /usr/share/X11/xkb/symbols/fr..."
+        # Trouver la ligne avec include "latin" et ajouter notre include juste après
+        sed -i '/include "latin"/a \    include "mswindows-capslock"' /usr/share/X11/xkb/symbols/fr
     else
-        echo_info "Le layout mswindows-capslock est déjà inclus dans fr"
+        echo_info "Le layout mswindows-capslock est déjà inclus"
     fi
     
-    # 4. Appliquer le layout via setxkbmap (pour test immédiat en session)
-    if command -v setxkbmap &> /dev/null; then
-        echo_info "Application immédiate du layout (session en cours)..."
-        setxkbmap -layout fr -variant mswindows-capslock 2>/dev/null || echo_warn "setxkbmap non disponible"
-    fi
+    # Configuration permanente via localectl
+    echo_info "Application de la configuration clavier..."
+    localectl set-x11-keymap fr pc105 "" "" 2>/dev/null || true
     
-    # 5. Configuration permanente via localectl
-    echo_info "Configuration permanente du clavier..."
-    if localectl set-x11-keymap fr "" "" mswindows-capslock 2>/dev/null; then
-        echo_info "Configuration permanente appliquée via localectl"
-    else
-        echo_warn "localectl n'a pas fonctionné, configuration alternative..."
-        mkdir -p /etc/X11/xorg.conf.d
-        cat > /etc/X11/xorg.conf.d/00-keyboard.conf <<'EOF'
+    # Configuration alternative via xorg.conf.d
+    mkdir -p /etc/X11/xorg.conf.d
+    cat > /etc/X11/xorg.conf.d/00-keyboard.conf <<'EOF'
 Section "InputClass"
     Identifier "system-keyboard"
     MatchIsKeyboard "on"
     Option "XkbLayout" "fr"
-    Option "XkbVariant" "mswindows-capslock"
+    Option "XkbModel" "pc105"
 EndSection
 EOF
-        echo_info "Fichier de configuration alternative créé"
-    fi
     
-    echo_info "✓ Patch clavier installé (redémarrage X recommandé pour persistance)"
+    echo_info "✓ Configuration clavier TKL installée"
+    echo_info "  → CapsLock activé = chiffres 1234567890"
+    echo_info "  → Shift + touche = chiffres 1234567890"
+    echo_warn "⚠️  Redémarrage de la session X nécessaire (ou reboot)"
     
 else
-    echo_warn "Fichier /usr/share/X11/xkb/symbols/fr introuvable - configuration clavier ignorée"
+    echo_error "Fichier /usr/share/X11/xkb/symbols/fr introuvable !"
+    echo_warn "Impossible de configurer le clavier AZERTY TKL"
 fi
+
+# SOLUTION 2 (Alternative si Solution 1 ne fonctionne pas) : Option XKB caps:shiftlock
+echo ""
+echo_info "--- Solution alternative disponible ---"
+echo_info "Si le layout personnalisé ne fonctionne pas, essayez :"
+echo_info "  1. Ouvrez Paramètres système KDE"
+echo_info "  2. Clavier → Avancé → Comportement de la touche Verr. Maj."
+echo_info "  3. Cochez : 'Verr. Maj. agit comme Maj Verr.' (caps:shiftlock)"
+echo_warn "  ⚠️  ATTENTION : Cette option affecte TOUTES les touches (lettres + chiffres)
 
 # ========================================
 # 14. CONFIGURATION SOURIS GAMING (1000 Hz)
