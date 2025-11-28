@@ -263,10 +263,13 @@ echo_info "Configuration Flatpak et installation des applications..."
 # Ajout du dépôt Flathub
 flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 
-# Installation de Mullvad VPN
+# Installation de Mullvad VPN via RPM (pas de Flatpak disponible)
 echo_info "Installation de Mullvad VPN..."
-flatpak install -y flathub net.mullvad.MullvadVPN
-flatpak override --user --filesystem=xdg-run/NetworkManager net.mullvad.MullvadVPN
+echo_info "Téléchargement du paquet RPM Mullvad..."
+curl -LO https://mullvad.net/download/app/rpm/latest
+dnf install -y ./mullvad-vpn*.rpm
+rm -f ./mullvad-vpn*.rpm
+systemctl enable --now mullvad-daemon
 
 # Installation de Brave Browser
 echo_info "Installation de Brave Browser..."
@@ -285,9 +288,11 @@ flatpak install -y flathub org.videolan.VLC
 echo_info "Installation de qBittorrent..."
 flatpak install -y flathub org.qbittorrent.qBittorrent
 
-# Installation de f.lux (Fluxgui)
-echo_info "Installation de f.lux..."
-flatpak install -y flathub com.justgetflux.flux
+# Installation de Redshift (alternative open-source à f.lux)
+echo_info "Installation de Redshift (filtre de lumière bleue)..."
+dnf install -y redshift redshift-gtk
+echo_info "Note: Redshift est une alternative open-source à f.lux"
+echo_info "Configurez-le via les paramètres système ou ~/.config/redshift.conf"
 
 # Installation de Steam
 echo_info "Installation de Steam..."
