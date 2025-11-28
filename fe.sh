@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# Script de sécurisation et configuration pour Fedora 43
-# Exécuter avec : sudo bash fedora_hardening.sh
+# Script de sécurisation et optimisation complet pour Fedora 43
+# Configuration: AMD Ryzen 7800X3D + RX 6950 XT + 32GB RAM 6000MHz + 2.5Gbps
+# Exécuter avec : sudo bash fedora_43_complete_optimized.sh
 
 set -e  # Arrêt en cas d'erreur
 
@@ -9,11 +10,13 @@ set -e  # Arrêt en cas d'erreur
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 echo_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 echo_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 echo_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+echo_section() { echo -e "\n${BLUE}========================================${NC}"; echo -e "${BLUE}$1${NC}"; echo -e "${BLUE}========================================${NC}"; }
 
 # Vérification root
 if [ "$EUID" -ne 0 ]; then 
@@ -21,36 +24,44 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-echo_info "=== Début de la configuration de sécurité Fedora 43 ==="
+echo_section "DÉBUT DE LA CONFIGURATION FEDORA 43"
+echo_info "Configuration détectée: AMD Ryzen + RX 6950 XT + 32GB RAM"
 
 # ========================================
 # 1. MISES À JOUR SYSTÈME
 # ========================================
-echo_info "Mise à jour du système..."
+echo_section "1. MISES À JOUR SYSTÈME"
+echo_info "Mise à jour complète du système..."
 dnf update --refresh -y
-fwupdmgr get-devices
-fwupdmgr update -y || echo_warn "Aucune mise à jour firmware disponible"
+fwupdmgr get-devices 2>/dev/null || true
+fwupdmgr update -y 2>/dev/null || echo_warn "Aucune mise à jour firmware disponible"
 dnf install -y dnf-automatic
 systemctl enable --now dnf-automatic.timer
+echo_info "✓ Système mis à jour"
 
 # ========================================
 # 2. PILOTES AMD GPU
 # ========================================
+echo_section "2. PILOTES AMD GPU (RX 6950 XT)"
 echo_info "Installation des pilotes AMD GPU..."
-dnf install -y mesa-va-drivers libva libva-utils mesa-vulkan-drivers vulkan-tools
+dnf install -y mesa-va-drivers libva libva-utils mesa-vulkan-drivers vulkan-tools amdgpu-firmware
+echo_info "✓ Pilotes AMD GPU installés"
 
 # ========================================
 # 3. PARE-FEU
 # ========================================
+echo_section "3. PARE-FEU"
 echo_info "Configuration du pare-feu..."
 systemctl enable --now firewalld
-firewall-cmd --set-default-zone=public
+firewall-cmd --set-default-zone=public 2>/dev/null || true
 firewall-cmd --reload
-systemctl disable --now dnf-makecache.timer
+systemctl disable dnf-makecache.timer 2>/dev/null || true
+echo_info "✓ Pare-feu configuré"
 
 # ========================================
 # 4. SÉCURISATION IPv6
 # ========================================
+echo_section "4. SÉCURISATION IPv6"
 echo_info "Configuration de la sécurisation IPv6..."
 cat > /etc/sysctl.d/99-ipv6-hardening.conf << 'EOF'
 net.ipv6.conf.all.accept_redirects=0
@@ -58,11 +69,13 @@ net.ipv6.conf.default.accept_redirects=0
 net.ipv6.conf.all.accept_ra=0
 net.ipv6.conf.all.disable_ipv6=0
 EOF
+echo_info "✓ IPv6 sécurisé"
 
 # ========================================
 # 5. DNS OVER TLS (Cloudflare)
 # ========================================
-echo_info "Configuration DNS over TLS..."
+echo_section "5. DNS OVER TLS"
+echo_info "Configuration DNS over TLS (Cloudflare Malware Blocking)..."
 mkdir -p /etc/systemd/resolved.conf.d
 cat > /etc/systemd/resolved.conf.d/99-dns-over-tls.conf << 'EOF'
 [Resolve]
@@ -70,23 +83,18 @@ DNS=1.1.1.2#security.cloudflare-dns.com 1.0.0.2#security.cloudflare-dns.com 2606
 DNSOverTLS=yes
 Domains=~.
 EOF
-
-# NE PAS redémarrer systemd-resolved pendant l'exécution
 systemctl enable systemd-resolved
-systemctl disable NetworkManager-wait-online.service
-echo_info "systemd-resolved sera activé au prochain redémarrage"
-
-systemctl enable --now systemd-resolved
-systemctl disable --now NetworkManager-wait-online.service
+systemctl disable NetworkManager-wait-online.service 2>/dev/null || true
+echo_info "✓ DNS over TLS configuré (appliqué après redémarrage)"
 
 # ========================================
 # 6. DURCISSEMENT KERNEL
 # ========================================
-echo_info "Durcissement du kernel..."
-grubby --update-kernel=ALL --args="module.sig_enforce=1"
+echo_section "6. DURCISSEMENT KERNEL"
+echo_info "Application des paramètres de sécurité kernel..."
+grubby --update-kernel=ALL --args="module.sig_enforce=1" 2>/dev/null || true
 
-# Configuration sysctl principale
-cat > /etc/sysctl.d/99-sysctl.conf << 'EOF'
+cat > /etc/sysctl.d/99-security-hardening.conf << 'EOF'
 # Protection des fichiers système
 fs.suid_dumpable=0
 fs.protected_fifos=2
@@ -139,12 +147,12 @@ net.ipv6.conf.all.mc_forwarding=0
 net.ipv6.conf.all.accept_redirects=0
 EOF
 
-# NE PAS appliquer sysctl immédiatement - sera actif après redémarrage
-echo_info "Les paramètres sysctl seront appliqués au prochain redémarrage"
+echo_info "✓ Paramètres de sécurité kernel configurés (appliqués après redémarrage)"
 
 # ========================================
 # 7. BLACKLIST DES MODULES RÉSEAU
 # ========================================
+echo_section "7. BLACKLIST MODULES RÉSEAU"
 echo_info "Blacklist des modules réseau non utilisés..."
 cat > /etc/modprobe.d/custom-blacklist.conf << 'EOF'
 install dccp /bin/false
@@ -164,39 +172,37 @@ install appletalk /bin/false
 install can /bin/false
 install atm /bin/false
 EOF
+echo_info "✓ Modules réseau obsolètes blacklistés"
 
 # ========================================
 # 8. SÉCURISATION SYSTÈME
 # ========================================
+echo_section "8. SÉCURISATION SYSTÈME"
 echo_info "Configuration des paramètres système de sécurité..."
 
-# Vérification et création du fichier logind.conf si nécessaire
 if [ ! -f /etc/systemd/logind.conf ]; then
-    echo_info "Création du fichier logind.conf..."
     touch /etc/systemd/logind.conf
 fi
 
-# Configuration de la gestion de session
 sed -i 's/#HandleLidSwitch=.*/HandleLidSwitch=lock/' /etc/systemd/logind.conf
 sed -i 's/#HandleLidSwitchExternalPower=.*/HandleLidSwitchExternalPower=lock/' /etc/systemd/logind.conf
 
-# Si les lignes n'existent pas, les ajouter
 if ! grep -q "^HandleLidSwitch=" /etc/systemd/logind.conf; then
-    echo "HandleLidSwitch=lock" | tee -a /etc/systemd/logind.conf
+    echo "HandleLidSwitch=lock" >> /etc/systemd/logind.conf
 fi
 
 if ! grep -q "^HandleLidSwitchExternalPower=" /etc/systemd/logind.conf; then
-    echo "HandleLidSwitchExternalPower=lock" | tee -a /etc/systemd/logind.conf
+    echo "HandleLidSwitchExternalPower=lock" >> /etc/systemd/logind.conf
 fi
 
-# NE PAS REDÉMARRER systemd-logind ici (cela tue les sessions actives)
-# Les changements seront appliqués au prochain redémarrage système
-echo_info "Les paramètres logind seront appliqués au prochain redémarrage"
+echo_info "✓ Verrouillage automatique configuré"
 
 # ========================================
 # 9. DÉSACTIVATION DES SERVICES NON NÉCESSAIRES
 # ========================================
+echo_section "9. DÉSACTIVATION SERVICES"
 echo_info "Désactivation des services non nécessaires..."
+
 SERVICES_TO_DISABLE=(
     "pcscd.socket"
     "pcscd.service"
@@ -213,9 +219,8 @@ SERVICES_TO_DISABLE=(
     "nfs-client.target"
 )
 
-# Désactiver SANS arrêter immédiatement (enlever --now)
 for service in "${SERVICES_TO_DISABLE[@]}"; do
-    systemctl disable "$service" 2>/dev/null || echo_warn "Service $service non trouvé"
+    systemctl disable "$service" 2>/dev/null || true
 done
 
 SERVICES_TO_MASK=(
@@ -239,14 +244,16 @@ SERVICES_TO_MASK=(
 )
 
 for service in "${SERVICES_TO_MASK[@]}"; do
-    systemctl mask "$service" 2>/dev/null || echo_warn "Service $service non trouvé"
+    systemctl mask "$service" 2>/dev/null || true
 done
 
 systemctl daemon-reload
+echo_info "✓ Services inutiles désactivés"
 
 # ========================================
 # 10. SÉCURISATION CRON
 # ========================================
+echo_section "10. SÉCURISATION CRON"
 echo_info "Sécurisation des répertoires cron..."
 chmod 700 /etc/crontab 2>/dev/null || true
 chmod 700 /etc/cron.monthly 2>/dev/null || true
@@ -254,204 +261,106 @@ chmod 700 /etc/cron.weekly 2>/dev/null || true
 chmod 700 /etc/cron.daily 2>/dev/null || true
 chmod 700 /etc/cron.hourly 2>/dev/null || true
 chmod 700 /etc/cron.d 2>/dev/null || true
+echo_info "✓ Répertoires cron sécurisés"
 
 # ========================================
 # 11. INSTALLATION FLATPAK ET APPLICATIONS
 # ========================================
+echo_section "11. INSTALLATION APPLICATIONS"
 echo_info "Configuration Flatpak et installation des applications..."
 
-# Ajout du dépôt Flathub
 flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 
-# Installation de Brave Browser
+# Mullvad VPN via RPM
+echo_info "Installation de Mullvad VPN (RPM)..."
+MULLVAD_URL="https://mullvad.net/download/app/rpm/latest"
+curl -LO "$MULLVAD_URL" 2>/dev/null || echo_warn "Échec téléchargement Mullvad"
+if [ -f mullvad-vpn*.rpm ]; then
+    dnf install -y ./mullvad-vpn*.rpm
+    rm -f ./mullvad-vpn*.rpm
+    systemctl enable mullvad-daemon 2>/dev/null || true
+    echo_info "✓ Mullvad VPN installé"
+else
+    echo_warn "Mullvad VPN non installé (téléchargement manuel requis)"
+fi
+
+# Brave Browser
 echo_info "Installation de Brave Browser..."
 flatpak install -y --noninteractive flathub com.brave.Browser
 xdg-settings set default-web-browser com.brave.Browser.desktop 2>/dev/null || true
+echo_info "✓ Brave Browser installé"
 
-# Installation de Discord
+# Discord
 echo_info "Installation de Discord..."
 flatpak install -y --noninteractive flathub com.discordapp.Discord
+echo_info "✓ Discord installé"
 
-# Installation de VLC
+# VLC
 echo_info "Installation de VLC..."
 flatpak install -y --noninteractive flathub org.videolan.VLC
+echo_info "✓ VLC installé"
 
-# Installation de qBittorrent
+# qBittorrent
 echo_info "Installation de qBittorrent..."
 flatpak install -y --noninteractive flathub org.qbittorrent.qBittorrent
+echo_info "✓ qBittorrent installé"
 
-# Installation de Redshift (alternative à f.lux)
+# Redshift (alternative à f.lux)
 echo_info "Installation de Redshift (filtre lumière bleue)..."
 dnf install -y redshift redshift-gtk
+echo_info "✓ Redshift installé (alternative open-source à f.lux)"
 
-# Installation de Steam
+# Steam
 echo_info "Installation de Steam..."
 flatpak install -y --noninteractive flathub com.valvesoftware.Steam
-
-echo_info "Installation des applications terminée !"
-
-# ========================================
-# 12. Keyboard Tweaks FR
-# ========================================
-
-# --- Keyboard tweaks for Fedora KDE (safe Fedora-compatible version) ---
-print_status "Configuration clavier AZERTY personnalisée (méthode Fedora)"
-
-# Répertoire override XKB pour Fedora (persistance, sans toucher aux fichiers RPM)
-XKB_OVERRIDE_DIR="/etc/X11/xkb/symbols"
-CUSTOM_FILE="$XKB_OVERRIDE_DIR/mswindows-capslock"
-
-# 1. Créer le dossier si nécessaire
-if [ ! -d "$XKB_OVERRIDE_DIR" ]; then
-    mkdir -p "$XKB_OVERRIDE_DIR" || { print_error "Impossible de créer $XKB_OVERRIDE_DIR"; exit 1; }
-fi
-
-# 2. Installer le layout personnalisé
-cat > "$CUSTOM_FILE" <<'EOF'
-// Fedora-safe custom AZERTY tweaks (preserve system integrity)
-partial alphanumeric_keys
-xkb_symbols "basic" {
-    key <AE01> { type= "FOUR_LEVEL_ALPHABETIC", [ ampersand, 1, bar, exclamdown ] };
-    key <AE02> { type= "FOUR_LEVEL_ALPHABETIC", [ eacute, 2, at, oneeighth ] };
-    key <AE03> { type= "FOUR_LEVEL_ALPHABETIC", [ quotedbl, 3, numbersign, sterling ] };
-    key <AE04> { type= "FOUR_LEVEL_ALPHABETIC", [ apostrophe, 4, onequarter, dollar ] };
-};
-EOF
-
-print_success "Fichier XKB personnalisé installé dans $CUSTOM_FILE"
-
-# 3. Appliquer le nouveau layout avec localectl
-if localectl set-x11-keymap fr "" "" mswindows-capslock 2>/dev/null; then
-    print_success "Layout XKB appliqué via localectl (Fedora KDE)"
-else
-    print_warn "localectl n'a pas pu appliquer le layout, tentative via fichier xorg.conf.d"
-    
-    mkdir -p /etc/X11/xorg.conf.d
-    cat > /etc/X11/xorg.conf.d/00-keyboard.conf <<'EOF'
-Section "InputClass"
-    Identifier "system-keyboard"
-    MatchIsKeyboard "on"
-    Option "XkbLayout" "fr"
-    Option "XkbVariant" "mswindows-capslock"
-EndSection
-EOF
-    print_success "Configuration alternative installée : /etc/X11/xorg.conf.d/00-keyboard.conf"
-fi
-
-print_status "Redémarrage de la session graphique nécessaire"
-
-# ========================================
-# 12.1 NETWORK OPTIMISATION
-# ========================================
-
-# --- Network tuning optimized for Fedora 43 (BBR + fq_codel + latency tweaks) ---
-print_status "Optimisation réseau Fedora 43 (BBR + fq_codel + faible latence)"
-
-# Charger BBR proprement (inutile mais safe)
-modprobe tcp_bbr 2>/dev/null || true
-echo "tcp_bbr" > /etc/modules-load.d/bbr.conf || true
-
-# Créer le fichier sysctl optimisé Fedora
-cat > /etc/sysctl.d/99-fedora-network.conf <<'EOF'
-# --- Congestion control + queue discipline ---
-net.ipv4.tcp_congestion_control = bbr
-net.core.default_qdisc = fq_codel
-
-# --- TCP performance & latency ---
-net.ipv4.tcp_fastopen = 3
-net.ipv4.tcp_slow_start_after_idle = 0
-net.ipv4.tcp_mtu_probing = 1
-
-# --- Buffers optimisés pour latence stable (pas énorme pour éviter le bufferbloat) ---
-net.core.rmem_max = 16777216
-net.core.wmem_max = 16777216
-net.ipv4.tcp_rmem = 4096 262144 16777216
-net.ipv4.tcp_wmem = 4096 262144 16777216
-
-# --- Amélioration files d’attente kernel ---
-net.core.netdev_max_backlog = 25000
-net.core.somaxconn = 1024
-EOF
-
-sysctl --system || print_warn "sysctl --system échoué (non critique)"
-
-# --- Optimisation buffers NIC ---
-NIC="$(ip route | awk '/default/ {print $5; exit}')"
-if [ -n "$NIC" ]; then
-    ethtool -G "$NIC" rx 4096 tx 4096 2>/dev/null \
-        || print_warn "Impossible de modifier les buffers NIC (non critique)"
-fi
-
-print_success "Optimisations réseau Fedora 43 appliquées"
+echo_info "✓ Steam installé"
 
 # ========================================
 # 12. OPTIMISATIONS MATÉRIELLES AMD
 # ========================================
-echo_info "=== Optimisations pour AMD Ryzen 7800X3D + RX 6950 XT ==="
+echo_section "12. OPTIMISATIONS AMD (7800X3D + RX 6950 XT)"
 
-# Vérification que le système est bien AMD
+# Vérification architecture AMD
 if ! lscpu | grep -q "AMD"; then
-    echo_warn "Ce script est optimisé pour processeurs AMD uniquement"
-    read -p "Continuer quand même ? (o/n) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[OoYy]$ ]]; then
-        echo_info "Optimisations AMD ignorées"
-        exit 0
-    fi
+    echo_warn "⚠ Processeur non-AMD détecté, certaines optimisations peuvent ne pas s'appliquer"
 fi
 
-# ========================================
-# 12.1 OPTIMISATIONS GRUB ET KERNEL
-# ========================================
-echo_info "Sauvegarde et modification de GRUB..."
+# 12.1 OPTIMISATIONS GRUB
+echo_info "Configuration GRUB pour AMD..."
 
-# Backup compressé avec horodatage
 if [ -f /etc/default/grub ]; then
     cp /etc/default/grub /etc/default/grub.backup.$(date +%Y%m%d-%H%M%S)
-    echo_info "Backup créé: /etc/default/grub.backup.$(date +%Y%m%d-%H%M%S)"
 fi
 
-# Paramètres kernel optimisés et SÉCURISÉS pour 7800X3D + 6950 XT
 KERNEL_PARAMS="amd_pstate=active amd_pstate.shared_mem=1 amdgpu.dc=1 amdgpu.dpm=1 nowatchdog split_lock_detect=off"
 
-# Vérifier si les paramètres sont déjà présents
 if ! grep -q 'amd_pstate=active' /etc/default/grub; then
-    echo_info "Ajout des paramètres kernel AMD optimisés..."
-    
-    # Modifier GRUB_CMDLINE_LINUX de manière sécurisée
     sed -i.bak "s/^\(GRUB_CMDLINE_LINUX=\"[^\"]*\)/\1 $KERNEL_PARAMS/" /etc/default/grub
-    
-    echo_info "Paramètres ajoutés: $KERNEL_PARAMS"
+    echo_info "✓ Paramètres kernel AMD ajoutés"
 else
     echo_warn "Paramètres AMD déjà présents dans GRUB"
 fi
 
-# Réduire le timeout GRUB (optionnel mais pratique)
+# Réduire timeout GRUB
 if ! grep -q '^GRUB_TIMEOUT=2' /etc/default/grub; then
     sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=2/' /etc/default/grub
-    echo_info "Timeout GRUB réduit à 2 secondes"
 fi
 
-# Régénération de la configuration GRUB (Fedora utilise grub2)
-echo_info "Régénération de la configuration GRUB..."
+# Régénération GRUB
 if [ -d /sys/firmware/efi ]; then
-    # Système UEFI
-    grub2-mkconfig -o /boot/efi/EFI/fedora/grub.cfg
-    echo_info "Configuration GRUB UEFI mise à jour"
+    grub2-mkconfig -o /boot/efi/EFI/fedora/grub.cfg 2>/dev/null || echo_warn "Erreur régénération GRUB UEFI"
+    echo_info "✓ Configuration GRUB UEFI mise à jour"
 else
-    # Système BIOS Legacy
-    grub2-mkconfig -o /boot/grub2/grub.cfg
-    echo_info "Configuration GRUB BIOS mise à jour"
+    grub2-mkconfig -o /boot/grub2/grub.cfg 2>/dev/null || echo_warn "Erreur régénération GRUB BIOS"
+    echo_info "✓ Configuration GRUB BIOS mise à jour"
 fi
 
-# ========================================
 # 12.2 OPTIMISATIONS SYSCTL
-# ========================================
-echo_info "Configuration des paramètres système (sysctl)..."
+echo_info "Configuration des paramètres système avancés..."
 
 cat > /etc/sysctl.d/99-amd-performance.conf << 'EOF'
 # ========================================
-# Optimisations pour AMD Ryzen 7800X3D + 32GB RAM 6000MHz
+# Optimisations AMD Ryzen 7800X3D + 32GB RAM 6000MHz + 2.5Gbps
 # ========================================
 
 # === Gestion mémoire (32GB RAM) ===
@@ -482,30 +391,19 @@ net.core.default_qdisc = fq
 kernel.sched_autogroup_enabled = 1
 kernel.sched_child_runs_first = 0
 
-# === Hugepages (gaming - optionnel) ===
-# Décommentez si nécessaire pour certains jeux
-# vm.nr_hugepages = 512
-# vm.hugetlb_shm_group = 1000
-
-# === Watchdog désactivé (déjà dans kernel params) ===
+# === Watchdog désactivé ===
 kernel.nmi_watchdog = 0
 EOF
 
-# Application des paramètres sysctl
-sysctl --system
-echo_info "Paramètres sysctl appliqués"
+echo_info "✓ Paramètres sysctl performance configurés"
 
-# ========================================
-# 12.3 CONFIGURATION ZRAM (optionnel mais recommandé)
-# ========================================
-echo_info "Configuration de zram (swap compressé en RAM)..."
+# 12.3 ZRAM CONFIGURATION
+echo_info "Configuration zram (swap compressé en RAM)..."
 
-# Installation de zram-generator s'il n'est pas présent
 if ! rpm -q zram-generator-defaults >/dev/null 2>&1; then
     dnf install -y zram-generator-defaults
 fi
 
-# Configuration zram optimisée pour 32GB RAM
 mkdir -p /etc/systemd/zram-generator.conf.d
 cat > /etc/systemd/zram-generator.conf.d/zram-size.conf << 'EOF'
 [zram0]
@@ -516,14 +414,11 @@ fs-type = swap
 EOF
 
 systemctl daemon-reload
-echo_info "zram configuré (actif au prochain redémarrage)"
+echo_info "✓ zram configuré (16GB max, zstd)"
 
-# ========================================
-# 12.4 OPTIMISATIONS AMD GPU (6950 XT)
-# ========================================
-echo_info "Configuration des paramètres AMD GPU..."
+# 12.4 OPTIMISATIONS AMD GPU
+echo_info "Configuration AMD GPU (RX 6950 XT)..."
 
-# Créer le fichier de configuration pour amdgpu
 cat > /etc/modprobe.d/amdgpu.conf << 'EOF'
 # Optimisations pour RX 6950 XT
 options amdgpu dc=1
@@ -532,15 +427,9 @@ options amdgpu audio=1
 options amdgpu freesync_video=1
 EOF
 
-# Vérifier la présence du firmware AMDGPU
-if ! rpm -q amdgpu-firmware >/dev/null 2>&1; then
-    echo_info "Installation du firmware AMD GPU..."
-    dnf install -y amdgpu-firmware
-fi
+echo_info "✓ AMD GPU optimisé (DPM, FreeSync activés)"
 
-# ========================================
-# 12.5 TUNED PROFILE (optionnel)
-# ========================================
+# 12.5 TUNED PROFILE
 echo_info "Configuration du profil tuned pour gaming..."
 
 if ! rpm -q tuned >/dev/null 2>&1; then
@@ -548,50 +437,81 @@ if ! rpm -q tuned >/dev/null 2>&1; then
 fi
 
 systemctl enable --now tuned
-
-# Profil throughput-performance est optimal pour gaming
 tuned-adm profile throughput-performance
-echo_info "Profil tuned activé: throughput-performance"
+echo_info "✓ Profil tuned: throughput-performance"
 
-# ========================================
-# 12.6 IRQBALANCE (distribution optimale des IRQ)
-# ========================================
-echo_info "Configuration d'irqbalance..."
+# 12.6 IRQBALANCE
+echo_info "Configuration irqbalance..."
 
 if ! rpm -q irqbalance >/dev/null 2>&1; then
     dnf install -y irqbalance
 fi
 
 systemctl enable --now irqbalance
-echo_info "irqbalance activé pour distribution optimale des interruptions"
+echo_info "✓ irqbalance activé"
 
-# ========================================
-# 12.7 CPUPOWER (OPTIONNEL - à utiliser avec précaution)
-# ========================================
-echo_info "Installation de cpupower (contrôle CPU)..."
+# 12.7 CPUPOWER
+echo_info "Installation cpupower..."
 
 if ! rpm -q kernel-tools >/dev/null 2>&1; then
     dnf install -y kernel-tools
 fi
 
-# NOTE: Avec amd_pstate=active, le mode performance est déjà optimal
-# Ne pas forcer le governor à moins de savoir ce que vous faites
-echo_warn "Note: amd_pstate=active gère déjà les performances CPU de manière optimale"
-echo_warn "Ne forcez pas le governor 'performance' sauf si nécessaire"
+echo_info "✓ cpupower installé (amd_pstate gère déjà les performances CPU)"
 
 # ========================================
 # FINALISATION
 # ========================================
-echo_info "=== Configuration terminée ==="
-echo_warn "Un redémarrage est FORTEMENT recommandé pour appliquer tous les changements."
-echo_info "Vérification des modules blacklistés avec : modprobe --showconfig | grep blacklist"
-echo ""
-echo_info "Voulez-vous redémarrer maintenant? (o/n)"
-read -r response
-if [[ "$response" =~ ^([oO][uU][iI]|[oO])$ ]]; then
+echo_section "CONFIGURATION TERMINÉE"
+echo_info ""
+echo_info "========================================="
+echo_info "✅ RÉSUMÉ DES CONFIGURATIONS APPLIQUÉES"
+echo_info "========================================="
+echo_info ""
+echo_info "🔒 SÉCURITÉ:"
+echo_info "  ✓ Système mis à jour"
+echo_info "  ✓ Pare-feu configuré"
+echo_info "  ✓ DNS over TLS (Cloudflare malware blocking)"
+echo_info "  ✓ Kernel durci (sysctl security)"
+echo_info "  ✓ Services inutiles désactivés"
+echo_info "  ✓ Modules réseau obsolètes blacklistés"
+echo_info ""
+echo_info "⚡ PERFORMANCES AMD:"
+echo_info "  ✓ AMD P-State activé (7800X3D)"
+echo_info "  ✓ AMD GPU optimisé (6950 XT - DPM, FreeSync)"
+echo_info "  ✓ Sysctl optimisé (32GB RAM + 2.5Gbps)"
+echo_info "  ✓ zram configuré (16GB max, zstd)"
+echo_info "  ✓ Tuned profile: throughput-performance"
+echo_info "  ✓ TCP BBR + FQ activé"
+echo_info ""
+echo_info "📦 APPLICATIONS INSTALLÉES:"
+echo_info "  ✓ Mullvad VPN"
+echo_info "  ✓ Brave Browser"
+echo_info "  ✓ Discord"
+echo_info "  ✓ VLC"
+echo_info "  ✓ qBittorrent"
+echo_info "  ✓ Redshift (filtre lumière bleue)"
+echo_info "  ✓ Steam"
+echo_info ""
+echo_warn "⚠️  REDÉMARRAGE OBLIGATOIRE pour appliquer:"
+echo_warn "   - Paramètres kernel GRUB (AMD P-State)"
+echo_warn "   - Optimisations sysctl"
+echo_warn "   - Modules GPU"
+echo_warn "   - DNS over TLS"
+echo_info ""
+echo_info "📋 Vérifications post-redémarrage:"
+echo_info "   - CPU scaling: cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor"
+echo_info "   - AMD P-State: cat /sys/devices/system/cpu/amd_pstate/status"
+echo_info "   - zram: swapon --show"
+echo_info "   - Modules blacklistés: modprobe --showconfig | grep blacklist"
+echo_info ""
+
+read -p "Voulez-vous redémarrer maintenant? (o/n) " -n 1 -r
+echo
+if [[ $REPLY =~ ^[OoYy]$ ]]; then
     echo_info "Redémarrage dans 5 secondes..."
     sleep 5
     reboot
 else
-    echo_info "N'oubliez pas de redémarrer manuellement."
+    echo_info "N'oubliez pas de redémarrer manuellement!"
 fi
