@@ -44,7 +44,7 @@ echo_info "✓ Système mis à jour"
 # ========================================
 echo_section "2. PILOTES AMD GPU (RX 6950 XT)"
 echo_info "Installation des pilotes AMD GPU..."
-dnf install -y mesa-va-drivers libva libva-utils mesa-vulkan-drivers vulkan-tools amdgpu-firmware
+dnf install -y mesa-va-drivers libva libva-utils mesa-vulkan-drivers vulkan-tools
 echo_info "✓ Pilotes AMD GPU installés"
 
 # ========================================
