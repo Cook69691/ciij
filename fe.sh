@@ -291,6 +291,57 @@ flatpak install -y --noninteractive flathub com.valvesoftware.Steam
 echo_info "Installation des applications terminée !"
 
 # ========================================
+# 12. Keyboard Tweaks FR
+# ========================================
+
+# --- Keyboard tweaks for Fedora KDE (safe Fedora-compatible version) ---
+print_status "Configuration clavier AZERTY personnalisée (méthode Fedora)"
+
+# Répertoire override XKB pour Fedora (persistance, sans toucher aux fichiers RPM)
+XKB_OVERRIDE_DIR="/etc/X11/xkb/symbols"
+CUSTOM_FILE="$XKB_OVERRIDE_DIR/mswindows-capslock"
+
+# 1. Créer le dossier si nécessaire
+if [ ! -d "$XKB_OVERRIDE_DIR" ]; then
+    mkdir -p "$XKB_OVERRIDE_DIR" || { print_error "Impossible de créer $XKB_OVERRIDE_DIR"; exit 1; }
+fi
+
+# 2. Installer le layout personnalisé
+cat > "$CUSTOM_FILE" <<'EOF'
+// Fedora-safe custom AZERTY tweaks (preserve system integrity)
+partial alphanumeric_keys
+xkb_symbols "basic" {
+    key <AE01> { type= "FOUR_LEVEL_ALPHABETIC", [ ampersand, 1, bar, exclamdown ] };
+    key <AE02> { type= "FOUR_LEVEL_ALPHABETIC", [ eacute, 2, at, oneeighth ] };
+    key <AE03> { type= "FOUR_LEVEL_ALPHABETIC", [ quotedbl, 3, numbersign, sterling ] };
+    key <AE04> { type= "FOUR_LEVEL_ALPHABETIC", [ apostrophe, 4, onequarter, dollar ] };
+};
+EOF
+
+print_success "Fichier XKB personnalisé installé dans $CUSTOM_FILE"
+
+# 3. Appliquer le nouveau layout avec localectl
+if localectl set-x11-keymap fr "" "" mswindows-capslock 2>/dev/null; then
+    print_success "Layout XKB appliqué via localectl (Fedora KDE)"
+else
+    print_warn "localectl n'a pas pu appliquer le layout, tentative via fichier xorg.conf.d"
+    
+    mkdir -p /etc/X11/xorg.conf.d
+    cat > /etc/X11/xorg.conf.d/00-keyboard.conf <<'EOF'
+Section "InputClass"
+    Identifier "system-keyboard"
+    MatchIsKeyboard "on"
+    Option "XkbLayout" "fr"
+    Option "XkbVariant" "mswindows-capslock"
+EndSection
+EOF
+    print_success "Configuration alternative installée : /etc/X11/xorg.conf.d/00-keyboard.conf"
+fi
+
+print_status "Redémarrage de la session graphique nécessaire"
+
+
+# ========================================
 # FINALISATION
 # ========================================
 echo_info "=== Configuration terminée ==="
