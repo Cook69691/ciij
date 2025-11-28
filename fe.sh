@@ -250,11 +250,6 @@ echo_info "Configuration Flatpak et installation des applications..."
 # Ajout du dépôt Flathub
 flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 
-# Installation de Mullvad VPN
-echo_info "Installation de Mullvad VPN..."
-flatpak install -y flathub net.mullvad.MullvadVPN
-flatpak override --user --filesystem=xdg-run/NetworkManager net.mullvad.MullvadVPN
-
 # Installation de Brave Browser
 echo_info "Installation de Brave Browser..."
 flatpak install -y flathub com.brave.Browser
