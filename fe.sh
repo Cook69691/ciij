@@ -263,19 +263,6 @@ echo_info "Configuration Flatpak et installation des applications..."
 # Ajout du dépôt Flathub
 flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 
-# Installation de Mullvad VPN via RPM (pas disponible en Flatpak)
-echo_info "Installation de Mullvad VPN..."
-MULLVAD_URL="https://mullvad.net/en/download/app/rpm/latest"
-curl -LO "$MULLVAD_URL"
-if [ -f mullvad-vpn*.rpm ]; then
-    dnf install -y ./mullvad-vpn*.rpm
-    rm -f ./mullvad-vpn*.rpm
-    systemctl enable --now mullvad-daemon
-    echo_info "Mullvad VPN installé avec succès"
-else
-    echo_warn "Échec du téléchargement de Mullvad VPN, continuez l'installation manuellement"
-fi
-
 # Installation de Brave Browser
 echo_info "Installation de Brave Browser..."
 flatpak install -y --noninteractive flathub com.brave.Browser
