@@ -71,6 +71,11 @@ DNSOverTLS=yes
 Domains=~.
 EOF
 
+# NE PAS redémarrer systemd-resolved pendant l'exécution
+systemctl enable systemd-resolved
+systemctl disable NetworkManager-wait-online.service
+echo_info "systemd-resolved sera activé au prochain redémarrage"
+
 systemctl enable --now systemd-resolved
 systemctl disable --now NetworkManager-wait-online.service
 
@@ -134,9 +139,8 @@ net.ipv6.conf.all.mc_forwarding=0
 net.ipv6.conf.all.accept_redirects=0
 EOF
 
-# Application des paramètres sysctl
-sysctl -p /etc/sysctl.d/99-sysctl.conf
-sysctl -p /etc/sysctl.d/99-ipv6-hardening.conf
+# NE PAS appliquer sysctl immédiatement - sera actif après redémarrage
+echo_info "Les paramètres sysctl seront appliqués au prochain redémarrage"
 
 # ========================================
 # 7. BLACKLIST DES MODULES RÉSEAU
@@ -209,8 +213,9 @@ SERVICES_TO_DISABLE=(
     "nfs-client.target"
 )
 
+# Désactiver SANS arrêter immédiatement (enlever --now)
 for service in "${SERVICES_TO_DISABLE[@]}"; do
-    systemctl disable --now "$service" 2>/dev/null || echo_warn "Service $service non trouvé"
+    systemctl disable "$service" 2>/dev/null || echo_warn "Service $service non trouvé"
 done
 
 SERVICES_TO_MASK=(
