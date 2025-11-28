@@ -263,40 +263,45 @@ echo_info "Configuration Flatpak et installation des applications..."
 # Ajout du dépôt Flathub
 flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 
-# Installation de Mullvad VPN via RPM (pas de Flatpak disponible)
+# Installation de Mullvad VPN via RPM (pas disponible en Flatpak)
 echo_info "Installation de Mullvad VPN..."
-echo_info "Téléchargement du paquet RPM Mullvad..."
-curl -LO https://mullvad.net/download/app/rpm/latest
-dnf install -y ./mullvad-vpn*.rpm
-rm -f ./mullvad-vpn*.rpm
-systemctl enable --now mullvad-daemon
+MULLVAD_URL="https://mullvad.net/en/download/app/rpm/latest"
+curl -LO "$MULLVAD_URL"
+if [ -f mullvad-vpn*.rpm ]; then
+    dnf install -y ./mullvad-vpn*.rpm
+    rm -f ./mullvad-vpn*.rpm
+    systemctl enable --now mullvad-daemon
+    echo_info "Mullvad VPN installé avec succès"
+else
+    echo_warn "Échec du téléchargement de Mullvad VPN, continuez l'installation manuellement"
+fi
 
 # Installation de Brave Browser
 echo_info "Installation de Brave Browser..."
-flatpak install -y flathub com.brave.Browser
-xdg-settings set default-web-browser com.brave.Browser.desktop
+flatpak install -y --noninteractive flathub com.brave.Browser
+xdg-settings set default-web-browser com.brave.Browser.desktop 2>/dev/null || true
 
 # Installation de Discord
 echo_info "Installation de Discord..."
-flatpak install -y flathub com.discordapp.Discord
+flatpak install -y --noninteractive flathub com.discordapp.Discord
 
 # Installation de VLC
 echo_info "Installation de VLC..."
-flatpak install -y flathub org.videolan.VLC
+flatpak install -y --noninteractive flathub org.videolan.VLC
 
 # Installation de qBittorrent
 echo_info "Installation de qBittorrent..."
-flatpak install -y flathub org.qbittorrent.qBittorrent
+flatpak install -y --noninteractive flathub org.qbittorrent.qBittorrent
 
-# Installation de Redshift (alternative open-source à f.lux)
-echo_info "Installation de Redshift (filtre de lumière bleue)..."
+# Installation de Redshift (alternative à f.lux)
+echo_info "Installation de Redshift (filtre lumière bleue)..."
 dnf install -y redshift redshift-gtk
-echo_info "Note: Redshift est une alternative open-source à f.lux"
-echo_info "Configurez-le via les paramètres système ou ~/.config/redshift.conf"
 
 # Installation de Steam
 echo_info "Installation de Steam..."
-flatpak install -y flathub com.valvesoftware.Steam
+flatpak install -y --noninteractive flathub com.valvesoftware.Steam
+
+echo_info "Installation des applications terminée !"
 
 # ========================================
 # FINALISATION
