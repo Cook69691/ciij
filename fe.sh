@@ -259,6 +259,22 @@ xdg-settings set default-web-browser com.brave.Browser.desktop
 echo_info "Installation de Discord..."
 flatpak install -y flathub com.discordapp.Discord
 
+# Installation de VLC
+echo_info "Installation de VLC..."
+flatpak install -y flathub org.videolan.VLC
+
+# Installation de qBittorrent
+echo_info "Installation de qBittorrent..."
+flatpak install -y flathub org.qbittorrent.qBittorrent
+
+# Installation de f.lux (Fluxgui)
+echo_info "Installation de f.lux..."
+flatpak install -y flathub com.justgetflux.flux
+
+# Installation de Steam
+echo_info "Installation de Steam..."
+flatpak install -y flathub com.valvesoftware.Steam
+
 # ========================================
 # FINALISATION
 # ========================================
