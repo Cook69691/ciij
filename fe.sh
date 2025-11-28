@@ -164,17 +164,29 @@ EOF
 # ========================================
 # 8. SÉCURISATION SYSTÈME
 # ========================================
-echo_info "Configuration des limites de sécurité..."
+echo_info "Configuration des paramètres système de sécurité..."
 
-# Désactivation des core dumps
-if ! grep -q "^* hard core 0" /etc/security/limits.conf; then
-    echo "* hard core 0" >> /etc/security/limits.conf
+# Vérification et création du fichier logind.conf si nécessaire
+if [ ! -f /etc/systemd/logind.conf ]; then
+    echo_info "Création du fichier logind.conf..."
+    sudo touch /etc/systemd/logind.conf
 fi
 
-# Configuration logind
-sed -i 's/^#NAutoVTs=.*/NAutoVTs=0/' /etc/systemd/logind.conf
-sed -i 's/^#ReserveVT=.*/ReserveVT=0/' /etc/systemd/logind.conf
-systemctl restart systemd-logind
+# Configuration de la gestion de session
+sudo sed -i 's/#HandleLidSwitch=.*/HandleLidSwitch=lock/' /etc/systemd/logind.conf
+sudo sed -i 's/#HandleLidSwitchExternalPower=.*/HandleLidSwitchExternalPower=lock/' /etc/systemd/logind.conf
+
+# Si les lignes n'existent pas, les ajouter
+if ! grep -q "^HandleLidSwitch=" /etc/systemd/logind.conf; then
+    echo "HandleLidSwitch=lock" | sudo tee -a /etc/systemd/logind.conf
+fi
+
+if ! grep -q "^HandleLidSwitchExternalPower=" /etc/systemd/logind.conf; then
+    echo "HandleLidSwitchExternalPower=lock" | sudo tee -a /etc/systemd/logind.conf
+fi
+
+# Redémarrage du service logind
+sudo systemctl restart systemd-logind
 
 # ========================================
 # 9. DÉSACTIVATION DES SERVICES NON NÉCESSAIRES
