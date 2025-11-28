@@ -460,6 +460,72 @@ fi
 echo_info "✓ cpupower installé (amd_pstate gère déjà les performances CPU)"
 
 # ========================================
+# 13. CONFIGURATION CLAVIER AZERTY PERSONNALISÉ
+# ========================================
+echo_info "Configuration clavier AZERTY personnalisé (méthode Fedora)..."
+
+# Répertoire override XKB pour Fedora (persistance, sans toucher aux fichiers RPM)
+XKB_OVERRIDE_DIR="/usr/share/X11/xkb/symbols"
+CUSTOM_FILE="$XKB_OVERRIDE_DIR/mswindows-capslock"
+
+# 1. Vérifier si le répertoire existe
+if [ ! -d "$XKB_OVERRIDE_DIR" ]; then
+    echo_error "Répertoire XKB non trouvé : $XKB_OVERRIDE_DIR"
+    exit 1
+fi
+
+# 2. Installer le layout personnalisé
+echo_info "Installation du layout clavier personnalisé..."
+cat > "$CUSTOM_FILE" <<'EOF'
+// Fedora-safe custom AZERTY tweaks (preserve system integrity)
+partial alphanumeric_keys
+xkb_symbols "basic" {
+    key <AE01> { type= "FOUR_LEVEL_ALPHABETIC", [ ampersand, 1, bar, exclamdown ] };
+    key <AE02> { type= "FOUR_LEVEL_ALPHABETIC", [ eacute, 2, at, oneeighth ] };
+    key <AE03> { type= "FOUR_LEVEL_ALPHABETIC", [ quotedbl, 3, numbersign, sterling ] };
+    key <AE04> { type= "FOUR_LEVEL_ALPHABETIC", [ apostrophe, 4, onequarter, dollar ] };
+};
+EOF
+
+if [ $? -eq 0 ]; then
+    echo_info "Fichier XKB personnalisé installé : $CUSTOM_FILE"
+else
+    echo_error "Échec de l'installation du fichier XKB"
+    exit 1
+fi
+
+# 3. Appliquer le nouveau layout avec localectl
+echo_info "Application du layout clavier via localectl..."
+if localectl set-x11-keymap fr "" "" mswindows-capslock 2>/dev/null; then
+    echo_info "Layout XKB appliqué avec succès (Fedora KDE)"
+else
+    echo_warn "localectl n'a pas pu appliquer le layout, configuration alternative via xorg.conf.d..."
+    
+    # Créer le répertoire s'il n'existe pas
+    mkdir -p /etc/X11/xorg.conf.d
+    
+    # Configuration alternative
+    cat > /etc/X11/xorg.conf.d/00-keyboard.conf <<'EOF'
+Section "InputClass"
+    Identifier "system-keyboard"
+    MatchIsKeyboard "on"
+    Option "XkbLayout" "fr"
+    Option "XkbVariant" "mswindows-capslock"
+EndSection
+EOF
+    
+    if [ $? -eq 0 ]; then
+        echo_info "Configuration alternative installée : /etc/X11/xorg.conf.d/00-keyboard.conf"
+    else
+        echo_error "Échec de la configuration alternative du clavier"
+    fi
+fi
+
+# 4. Afficher le statut actuel
+echo_info "Configuration clavier actuelle :"
+localectl status 2>/dev/null || echo_warn "Impossible d'afficher le statut localectl"
+
+# ========================================
 # FINALISATION
 # ========================================
 echo_section "CONFIGURATION TERMINÉE"
