@@ -495,11 +495,15 @@ EOF
         echo_info "Le layout mswindows-capslock est déjà inclus"
     fi
     
-    # Configuration permanente via localectl
-    echo_info "Application de la configuration clavier..."
-    localectl set-x11-keymap fr pc105 "" "" 2>/dev/null || true
+    # Configuration permanente via localectl (Fedora KDE 43)
+    echo_info "Application de la configuration clavier via localectl..."
+    if localectl set-x11-keymap fr pc105 "" "" 2>/dev/null; then
+        echo_info "✓ Configuration appliquée via localectl"
+    else
+        echo_warn "localectl a échoué, utilisation de la méthode alternative..."
+    fi
     
-    # Configuration alternative via xorg.conf.d
+    # Configuration via xorg.conf.d (méthode de secours)
     mkdir -p /etc/X11/xorg.conf.d
     cat > /etc/X11/xorg.conf.d/00-keyboard.conf <<'EOF'
 Section "InputClass"
@@ -509,6 +513,7 @@ Section "InputClass"
     Option "XkbModel" "pc105"
 EndSection
 EOF
+    echo_info "✓ Fichier xorg.conf.d créé"
     
     echo_info "✓ Configuration clavier TKL installée"
     echo_info "  → CapsLock activé = chiffres 1234567890"
@@ -527,7 +532,7 @@ echo_info "Si le layout personnalisé ne fonctionne pas, essayez :"
 echo_info "  1. Ouvrez Paramètres système KDE"
 echo_info "  2. Clavier → Avancé → Comportement de la touche Verr. Maj."
 echo_info "  3. Cochez : 'Verr. Maj. agit comme Maj Verr.' (caps:shiftlock)"
-echo_warn "  ⚠️  ATTENTION : Cette option affecte TOUTES les touches (lettres + chiffres)
+echo_warn "  ⚠️  ATTENTION : Cette option affecte TOUTES les touches (lettres + chiffres)"
 
 # ========================================
 # 14. CONFIGURATION SOURIS GAMING (1000 Hz)
