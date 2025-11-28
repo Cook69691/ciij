@@ -470,13 +470,19 @@ if [ -f /usr/share/X11/xkb/symbols/fr ]; then
     # 2. Créer le fichier mswindows-capslock personnalisé
     echo_info "Installation du layout clavier personnalisé..."
     cat > /usr/share/X11/xkb/symbols/mswindows-capslock <<'EOF'
-// Minimal safe mswindows-capslock snippet (preserve original)
+// Minimal safe mswindows-capslock snippet (CapsLock gives numbers on TKL)
 partial alphanumeric_keys
 xkb_symbols "basic" {
-    key <AE01> { type= "FOUR_LEVEL_ALPHABETIC", [ ampersand, 1, bar, exclamdown ] };
-    key <AE02> { type= "FOUR_LEVEL_ALPHABETIC", [ eacute, 2, at, oneeighth ] };
-    key <AE03> { type= "FOUR_LEVEL_ALPHABETIC", [ quotedbl, 3, numbersign, sterling ] };
-    key <AE04> { type= "FOUR_LEVEL_ALPHABETIC", [ apostrophe, 4, onequarter, dollar ] };
+    key <AE01> { [ ampersand, 1, bar, exclamdown ] };
+    key <AE02> { [ eacute, 2, at, oneeighth ] };
+    key <AE03> { [ quotedbl, 3, numbersign, sterling ] };
+    key <AE04> { [ apostrophe, 4, onequarter, dollar ] };
+    key <AE05> { [ parenleft, 5, braceleft, threequarters ] };
+    key <AE06> { [ minus, 6, asciicircum, threequarters ] };
+    key <AE07> { [ egrave, 7, grave, fiveeighths ] };
+    key <AE08> { [ underscore, 8, backslash, trademark ] };
+    key <AE09> { [ ccedilla, 9, asciicircum, plusminus ] };
+    key <AE10> { [ agrave, 0, at, degree ] };
 };
 EOF
     
