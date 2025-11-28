@@ -525,6 +525,43 @@ else
 fi
 
 # ========================================
+# 14. CONFIGURATION SOURIS GAMING (1000 Hz)
+# ========================================
+echo_info "Configuration du polling rate souris gaming à 1000 Hz..."
+
+# 1. Créer le fichier de configuration udev pour le polling rate
+echo_info "Création de la règle udev pour le polling rate..."
+cat > /etc/udev/rules.d/99-mouse-polling-rate.conf <<'EOF'
+# Set 1000Hz polling rate for gaming mice
+ACTION=="add", SUBSYSTEM=="usb", DRIVER=="usbhid", ATTR{bInterval}=="*", ATTR{bInterval}="1"
+EOF
+
+# 2. Créer un module de configuration pour usbhid
+echo_info "Configuration du module usbhid..."
+cat > /etc/modprobe.d/usbhid.conf <<'EOF'
+# Force 1000Hz polling rate for USB mice
+options usbhid mousepoll=1
+EOF
+
+# 3. Recharger les règles udev
+echo_info "Rechargement des règles udev..."
+udevadm control --reload-rules
+udevadm trigger --subsystem-match=usb
+
+# 4. Vérifier la configuration actuelle
+echo_info "Configuration souris appliquée :"
+if [ -f /sys/module/usbhid/parameters/mousepoll ]; then
+    CURRENT_POLL=$(cat /sys/module/usbhid/parameters/mousepoll)
+    echo_info "  → Polling rate actuel : ${CURRENT_POLL} ms"
+else
+    echo_warn "  → Impossible de lire le polling rate actuel"
+fi
+
+echo_info "✓ Configuration 1000 Hz activée"
+echo_warn "⚠️  Redémarrage nécessaire pour appliquer le polling rate de manière permanente"
+echo_info "   Après redémarrage, vérifiez avec : cat /sys/module/usbhid/parameters/mousepoll"
+
+# ========================================
 # FINALISATION
 # ========================================
 echo_section "CONFIGURATION TERMINÉE"
