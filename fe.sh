@@ -341,7 +341,7 @@ fi
 print_status "Redémarrage de la session graphique nécessaire"
 
 # ========================================
-# 13. NETWORK OPTIMISATION
+# 12.1 NETWORK OPTIMISATION
 # ========================================
 
 # --- Network tuning optimized for Fedora 43 (BBR + fq_codel + latency tweaks) ---
@@ -383,6 +383,201 @@ if [ -n "$NIC" ]; then
 fi
 
 print_success "Optimisations réseau Fedora 43 appliquées"
+
+# ========================================
+# 12. OPTIMISATIONS MATÉRIELLES AMD
+# ========================================
+echo_info "=== Optimisations pour AMD Ryzen 7800X3D + RX 6950 XT ==="
+
+# Vérification que le système est bien AMD
+if ! lscpu | grep -q "AMD"; then
+    echo_warn "Ce script est optimisé pour processeurs AMD uniquement"
+    read -p "Continuer quand même ? (o/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[OoYy]$ ]]; then
+        echo_info "Optimisations AMD ignorées"
+        exit 0
+    fi
+fi
+
+# ========================================
+# 12.1 OPTIMISATIONS GRUB ET KERNEL
+# ========================================
+echo_info "Sauvegarde et modification de GRUB..."
+
+# Backup compressé avec horodatage
+if [ -f /etc/default/grub ]; then
+    cp /etc/default/grub /etc/default/grub.backup.$(date +%Y%m%d-%H%M%S)
+    echo_info "Backup créé: /etc/default/grub.backup.$(date +%Y%m%d-%H%M%S)"
+fi
+
+# Paramètres kernel optimisés et SÉCURISÉS pour 7800X3D + 6950 XT
+KERNEL_PARAMS="amd_pstate=active amd_pstate.shared_mem=1 amdgpu.dc=1 amdgpu.dpm=1 nowatchdog split_lock_detect=off"
+
+# Vérifier si les paramètres sont déjà présents
+if ! grep -q 'amd_pstate=active' /etc/default/grub; then
+    echo_info "Ajout des paramètres kernel AMD optimisés..."
+    
+    # Modifier GRUB_CMDLINE_LINUX de manière sécurisée
+    sed -i.bak "s/^\(GRUB_CMDLINE_LINUX=\"[^\"]*\)/\1 $KERNEL_PARAMS/" /etc/default/grub
+    
+    echo_info "Paramètres ajoutés: $KERNEL_PARAMS"
+else
+    echo_warn "Paramètres AMD déjà présents dans GRUB"
+fi
+
+# Réduire le timeout GRUB (optionnel mais pratique)
+if ! grep -q '^GRUB_TIMEOUT=2' /etc/default/grub; then
+    sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=2/' /etc/default/grub
+    echo_info "Timeout GRUB réduit à 2 secondes"
+fi
+
+# Régénération de la configuration GRUB (Fedora utilise grub2)
+echo_info "Régénération de la configuration GRUB..."
+if [ -d /sys/firmware/efi ]; then
+    # Système UEFI
+    grub2-mkconfig -o /boot/efi/EFI/fedora/grub.cfg
+    echo_info "Configuration GRUB UEFI mise à jour"
+else
+    # Système BIOS Legacy
+    grub2-mkconfig -o /boot/grub2/grub.cfg
+    echo_info "Configuration GRUB BIOS mise à jour"
+fi
+
+# ========================================
+# 12.2 OPTIMISATIONS SYSCTL
+# ========================================
+echo_info "Configuration des paramètres système (sysctl)..."
+
+cat > /etc/sysctl.d/99-amd-performance.conf << 'EOF'
+# ========================================
+# Optimisations pour AMD Ryzen 7800X3D + 32GB RAM 6000MHz
+# ========================================
+
+# === Gestion mémoire (32GB RAM) ===
+vm.swappiness = 10
+vm.vfs_cache_pressure = 50
+vm.dirty_ratio = 15
+vm.dirty_background_ratio = 5
+vm.dirty_expire_centisecs = 3000
+vm.dirty_writeback_centisecs = 500
+
+# === Limites système ===
+fs.file-max = 2097152
+fs.inotify.max_user_watches = 524288
+fs.inotify.max_user_instances = 1024
+fs.inotify.max_queued_events = 32768
+
+# === Performance réseau (2.5 Gbps) ===
+net.core.netdev_max_backlog = 5000
+net.core.rmem_max = 134217728
+net.core.wmem_max = 134217728
+net.ipv4.tcp_rmem = 4096 87380 67108864
+net.ipv4.tcp_wmem = 4096 65536 67108864
+net.ipv4.tcp_fastopen = 3
+net.ipv4.tcp_congestion_control = bbr
+net.core.default_qdisc = fq
+
+# === Optimisations scheduler ===
+kernel.sched_autogroup_enabled = 1
+kernel.sched_child_runs_first = 0
+
+# === Hugepages (gaming - optionnel) ===
+# Décommentez si nécessaire pour certains jeux
+# vm.nr_hugepages = 512
+# vm.hugetlb_shm_group = 1000
+
+# === Watchdog désactivé (déjà dans kernel params) ===
+kernel.nmi_watchdog = 0
+EOF
+
+# Application des paramètres sysctl
+sysctl --system
+echo_info "Paramètres sysctl appliqués"
+
+# ========================================
+# 12.3 CONFIGURATION ZRAM (optionnel mais recommandé)
+# ========================================
+echo_info "Configuration de zram (swap compressé en RAM)..."
+
+# Installation de zram-generator s'il n'est pas présent
+if ! rpm -q zram-generator-defaults >/dev/null 2>&1; then
+    dnf install -y zram-generator-defaults
+fi
+
+# Configuration zram optimisée pour 32GB RAM
+mkdir -p /etc/systemd/zram-generator.conf.d
+cat > /etc/systemd/zram-generator.conf.d/zram-size.conf << 'EOF'
+[zram0]
+zram-size = min(ram / 2, 16384)
+compression-algorithm = zstd
+swap-priority = 100
+fs-type = swap
+EOF
+
+systemctl daemon-reload
+echo_info "zram configuré (actif au prochain redémarrage)"
+
+# ========================================
+# 12.4 OPTIMISATIONS AMD GPU (6950 XT)
+# ========================================
+echo_info "Configuration des paramètres AMD GPU..."
+
+# Créer le fichier de configuration pour amdgpu
+cat > /etc/modprobe.d/amdgpu.conf << 'EOF'
+# Optimisations pour RX 6950 XT
+options amdgpu dc=1
+options amdgpu dpm=1
+options amdgpu audio=1
+options amdgpu freesync_video=1
+EOF
+
+# Vérifier la présence du firmware AMDGPU
+if ! rpm -q amdgpu-firmware >/dev/null 2>&1; then
+    echo_info "Installation du firmware AMD GPU..."
+    dnf install -y amdgpu-firmware
+fi
+
+# ========================================
+# 12.5 TUNED PROFILE (optionnel)
+# ========================================
+echo_info "Configuration du profil tuned pour gaming..."
+
+if ! rpm -q tuned >/dev/null 2>&1; then
+    dnf install -y tuned
+fi
+
+systemctl enable --now tuned
+
+# Profil throughput-performance est optimal pour gaming
+tuned-adm profile throughput-performance
+echo_info "Profil tuned activé: throughput-performance"
+
+# ========================================
+# 12.6 IRQBALANCE (distribution optimale des IRQ)
+# ========================================
+echo_info "Configuration d'irqbalance..."
+
+if ! rpm -q irqbalance >/dev/null 2>&1; then
+    dnf install -y irqbalance
+fi
+
+systemctl enable --now irqbalance
+echo_info "irqbalance activé pour distribution optimale des interruptions"
+
+# ========================================
+# 12.7 CPUPOWER (OPTIONNEL - à utiliser avec précaution)
+# ========================================
+echo_info "Installation de cpupower (contrôle CPU)..."
+
+if ! rpm -q kernel-tools >/dev/null 2>&1; then
+    dnf install -y kernel-tools
+fi
+
+# NOTE: Avec amd_pstate=active, le mode performance est déjà optimal
+# Ne pas forcer le governor à moins de savoir ce que vous faites
+echo_warn "Note: amd_pstate=active gère déjà les performances CPU de manière optimale"
+echo_warn "Ne forcez pas le governor 'performance' sauf si nécessaire"
 
 # ========================================
 # FINALISATION
