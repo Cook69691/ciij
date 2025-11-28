@@ -169,21 +169,25 @@ echo_info "Configuration des paramètres système de sécurité..."
 # Vérification et création du fichier logind.conf si nécessaire
 if [ ! -f /etc/systemd/logind.conf ]; then
     echo_info "Création du fichier logind.conf..."
-    sudo touch /etc/systemd/logind.conf
+    touch /etc/systemd/logind.conf
 fi
 
 # Configuration de la gestion de session
-sudo sed -i 's/#HandleLidSwitch=.*/HandleLidSwitch=lock/' /etc/systemd/logind.conf
-sudo sed -i 's/#HandleLidSwitchExternalPower=.*/HandleLidSwitchExternalPower=lock/' /etc/systemd/logind.conf
+sed -i 's/#HandleLidSwitch=.*/HandleLidSwitch=lock/' /etc/systemd/logind.conf
+sed -i 's/#HandleLidSwitchExternalPower=.*/HandleLidSwitchExternalPower=lock/' /etc/systemd/logind.conf
 
 # Si les lignes n'existent pas, les ajouter
 if ! grep -q "^HandleLidSwitch=" /etc/systemd/logind.conf; then
-    echo "HandleLidSwitch=lock" | sudo tee -a /etc/systemd/logind.conf
+    echo "HandleLidSwitch=lock" | tee -a /etc/systemd/logind.conf
 fi
 
 if ! grep -q "^HandleLidSwitchExternalPower=" /etc/systemd/logind.conf; then
-    echo "HandleLidSwitchExternalPower=lock" | sudo tee -a /etc/systemd/logind.conf
+    echo "HandleLidSwitchExternalPower=lock" | tee -a /etc/systemd/logind.conf
 fi
+
+# NE PAS REDÉMARRER systemd-logind ici (cela tue les sessions actives)
+# Les changements seront appliqués au prochain redémarrage système
+echo_info "Les paramètres logind seront appliqués au prochain redémarrage"
 
 # ========================================
 # 9. DÉSACTIVATION DES SERVICES NON NÉCESSAIRES
