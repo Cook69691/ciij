@@ -185,9 +185,6 @@ if ! grep -q "^HandleLidSwitchExternalPower=" /etc/systemd/logind.conf; then
     echo "HandleLidSwitchExternalPower=lock" | sudo tee -a /etc/systemd/logind.conf
 fi
 
-# Redémarrage du service logind
-sudo systemctl restart systemd-logind
-
 # ========================================
 # 9. DÉSACTIVATION DES SERVICES NON NÉCESSAIRES
 # ========================================
