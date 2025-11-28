@@ -462,22 +462,15 @@ echo_info "✓ cpupower installé (amd_pstate gère déjà les performances CPU)
 # ========================================
 # 13. CONFIGURATION CLAVIER AZERTY PERSONNALISÉ
 # ========================================
-echo_info "Configuration clavier AZERTY personnalisé (méthode Fedora)..."
+echo_info "Configuration clavier AZERTY (patch minimal)..."
 
-# Répertoire override XKB pour Fedora (persistance, sans toucher aux fichiers RPM)
-XKB_OVERRIDE_DIR="/usr/share/X11/xkb/symbols"
-CUSTOM_FILE="$XKB_OVERRIDE_DIR/mswindows-capslock"
-
-# 1. Vérifier si le répertoire existe
-if [ ! -d "$XKB_OVERRIDE_DIR" ]; then
-    echo_error "Répertoire XKB non trouvé : $XKB_OVERRIDE_DIR"
-    exit 1
-fi
-
-# 2. Installer le layout personnalisé
-echo_info "Installation du layout clavier personnalisé..."
-cat > "$CUSTOM_FILE" <<'EOF'
-// Fedora-safe custom AZERTY tweaks (preserve system integrity)
+# 1. Vérifier si le fichier XKB français existe
+if [ -f /usr/share/X11/xkb/symbols/fr ]; then
+    
+    # 2. Créer le fichier mswindows-capslock personnalisé
+    echo_info "Installation du layout clavier personnalisé..."
+    cat > /usr/share/X11/xkb/symbols/mswindows-capslock <<'EOF'
+// Minimal safe mswindows-capslock snippet (preserve original)
 partial alphanumeric_keys
 xkb_symbols "basic" {
     key <AE01> { type= "FOUR_LEVEL_ALPHABETIC", [ ampersand, 1, bar, exclamdown ] };
@@ -486,26 +479,29 @@ xkb_symbols "basic" {
     key <AE04> { type= "FOUR_LEVEL_ALPHABETIC", [ apostrophe, 4, onequarter, dollar ] };
 };
 EOF
-
-if [ $? -eq 0 ]; then
-    echo_info "Fichier XKB personnalisé installé : $CUSTOM_FILE"
-else
-    echo_error "Échec de l'installation du fichier XKB"
-    exit 1
-fi
-
-# 3. Appliquer le nouveau layout avec localectl
-echo_info "Application du layout clavier via localectl..."
-if localectl set-x11-keymap fr "" "" mswindows-capslock 2>/dev/null; then
-    echo_info "Layout XKB appliqué avec succès (Fedora KDE)"
-else
-    echo_warn "localectl n'a pas pu appliquer le layout, configuration alternative via xorg.conf.d..."
     
-    # Créer le répertoire s'il n'existe pas
-    mkdir -p /etc/X11/xorg.conf.d
+    # 3. Ajouter l'inclusion dans le fichier fr (si pas déjà présente)
+    if ! grep -q "mswindows-capslock" /usr/share/X11/xkb/symbols/fr; then
+        echo_info "Ajout de l'inclusion mswindows-capslock dans le fichier fr..."
+        sed -i '/include "latin"/a include "mswindows-capslock"' /usr/share/X11/xkb/symbols/fr || true
+    else
+        echo_info "Le layout mswindows-capslock est déjà inclus dans fr"
+    fi
     
-    # Configuration alternative
-    cat > /etc/X11/xorg.conf.d/00-keyboard.conf <<'EOF'
+    # 4. Appliquer le layout via setxkbmap (pour test immédiat en session)
+    if command -v setxkbmap &> /dev/null; then
+        echo_info "Application immédiate du layout (session en cours)..."
+        setxkbmap -layout fr -variant mswindows-capslock 2>/dev/null || echo_warn "setxkbmap non disponible"
+    fi
+    
+    # 5. Configuration permanente via localectl
+    echo_info "Configuration permanente du clavier..."
+    if localectl set-x11-keymap fr "" "" mswindows-capslock 2>/dev/null; then
+        echo_info "Configuration permanente appliquée via localectl"
+    else
+        echo_warn "localectl n'a pas fonctionné, configuration alternative..."
+        mkdir -p /etc/X11/xorg.conf.d
+        cat > /etc/X11/xorg.conf.d/00-keyboard.conf <<'EOF'
 Section "InputClass"
     Identifier "system-keyboard"
     MatchIsKeyboard "on"
@@ -513,17 +509,14 @@ Section "InputClass"
     Option "XkbVariant" "mswindows-capslock"
 EndSection
 EOF
-    
-    if [ $? -eq 0 ]; then
-        echo_info "Configuration alternative installée : /etc/X11/xorg.conf.d/00-keyboard.conf"
-    else
-        echo_error "Échec de la configuration alternative du clavier"
+        echo_info "Fichier de configuration alternative créé"
     fi
+    
+    echo_info "✓ Patch clavier installé (redémarrage X recommandé pour persistance)"
+    
+else
+    echo_warn "Fichier /usr/share/X11/xkb/symbols/fr introuvable - configuration clavier ignorée"
 fi
-
-# 4. Afficher le statut actuel
-echo_info "Configuration clavier actuelle :"
-localectl status 2>/dev/null || echo_warn "Impossible d'afficher le statut localectl"
 
 # ========================================
 # FINALISATION
