@@ -1,0 +1,368 @@
+#!/bin/bash
+#==============================================================================
+# OPTIMISATION KUBUNTU 8.1 - VERSION CORRIGÉE
+# CORRECTIONS : GameMode renice, Buffers Réseau 2.5G, Erreur 'section_15'
+# AJOUT : ZRAM pour 32Go RAM
+# 7800X3D + 6950XT/7950XT + 32Go RAM + 2.5G NET
+#==============================================================================
+
+# --- CONFIGURATION DE SÉCURITÉ ---
+set -eo pipefail
+trap 'if [ $? -ne 0 ]; then echo -e "\033[0;31m[✗] Erreur à la ligne $LINENO lors de la commande : $BASH_COMMAND\033[0m"; fi' ERR
+
+# --- COULEURS ET FONCTIONS ---
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; CYAN='\033[0;36m'; MAGENTA='\033[0;35m'; NC='\033[0m'
+print_status() { echo -e "${BLUE}[INFO]${NC} $1"; }
+print_success() { echo -e "${GREEN}[✓]${NC} $1"; }
+print_warning() { echo -e "${YELLOW}[⚠]${NC} $1"; }
+print_highlight() { echo -e "${MAGENTA}[★]${NC} $1"; }
+print_section() { echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"; }
+
+# --- DÉTECTION ET VÉRIFICATIONS PRÉALABLES ---
+
+detect_desktop() {
+    if [ -n "${XDG_CURRENT_DESKTOP:-}" ]; then DESKTOP_ENV="$XDG_CURRENT_DESKTOP"
+    elif [ -n "${DESKTOP_SESSION:-}" ]; then DESKTOP_SESSION_NAME="$DESKTOP_SESSION"
+    elif command -v plasmashell &>/dev/null; then DESKTOP_ENV="KDE"
+    else DESKTOP_ENV="Unknown"; fi
+    [ -n "${WAYLAND_DISPLAY:-}" ] && SESSION_TYPE="Wayland" || SESSION_TYPE="X11"
+}
+
+if [ "$EUID" -ne 0 ]; then echo -e "${RED}Erreur : Ce script doit être lancé avec sudo.${NC}"; exit 1; fi
+REAL_USER="${SUDO_USER:-$USER}"
+REAL_HOME=$(eval echo ~$REAL_USER)
+
+if ! ping -c 1 1.1.1.1 &>/dev/null; then echo -e "${RED}Erreur : Pas de connexion Internet.${NC}"; exit 1; fi
+
+detect_desktop
+
+print_section
+echo -e "${CYAN}  ╔═══════════════════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${CYAN}  ║   OPTIMISATION KUBUNTU 8.1 - VERSION CORRIGÉE (ZRAM INCLUS)   ║${NC}"
+echo -e "${CYAN}  ║   7800X3D | Bureau : ${DESKTOP_ENV} / ${SESSION_TYPE}                      ║${NC}"
+echo -e "${CYAN}  ╚═══════════════════════════════════════════════════════════╝${NC}"
+print_section
+
+echo -e "${RED}⚠️  ATTENTION : CE SCRIPT MODIFIE DES PARAMÈTRES SYSTÈME CRITIQUES.${NC}"
+echo -e "${YELLOW}Démarrage de l'optimisation automatique dans 5 secondes...${NC}"
+for i in {5..1}; do echo -n "$i... "; sleep 1; done
+echo -e "\n${GREEN}Démarrage !${NC}"
+
+# --- DÉBUT DES SECTIONS D'OPTIMISATION ---
+
+section_1() {
+    print_status "1/15 Mise à jour système et pré-requis"
+    apt update
+    DEBIAN_FRONTEND=noninteractive apt upgrade -y
+    DEBIAN_FRONTEND=noninteractive apt full-upgrade -y
+    DEBIAN_FRONTEND=noninteractive apt install -y curl wget gnupg ca-certificates gdebi-core build-essential git htop fastfetch software-properties-common apt-transport-https flatpak unattended-upgrades
+    apt install -f -y
+    print_success "Système à jour"
+}
+
+section_2() {
+    print_status "2/15 Pilotes AMD + flags RADV (Sécurisé)"
+    DEBIAN_FRONTEND=noninteractive apt install -y mesa-vulkan-drivers mesa-utils libgl1-mesa-dri xserver-xorg-video-amdgpu vulkan-tools libvulkan1 mesa-va-drivers mesa-vdpau-drivers
+    mkdir -p /etc/environment.d
+    cat > /etc/environment.d/amd-gpu.conf <<EOF
+RADV_PERFTEST=gpu,sam
+AMD_VULKAN_ICD=RADV
+EOF
+    print_success "Pilotes AMD configurés"
+}
+
+section_3() {
+    print_status "3/15 CoreCtrl (Stable par défaut pour Kubuntu)"
+    DEBIAN_FRONTEND=noninteractive apt install -y corectrl
+    usermod -aG render,video "$REAL_USER"
+    print_success "CoreCtrl installé et utilisateur ajouté aux groupes vidéo/render"
+}
+
+section_4() {
+    print_status "4/15 MangoHud (HUD performance)"
+    DEBIAN_FRONTEND=noninteractive apt install -y mangohud goverlay
+    mkdir -p "$REAL_HOME/.config/MangoHud"
+    cat > "$REAL_HOME/.config/MangoHud/MangoHud.conf" <<EOF
+vsync=0
+# no_display=1  <-- Mis en commentaire. Le HUD sera VISIBLE par défaut.
+fps
+frametime
+frame_timing=1
+gpu_temp
+cpu_temp
+gpu_stats
+cpu_stats
+vram
+position=top-left
+font_size=24
+toggle_hud=Shift_R+F12
+toggle_fps_limit=Shift_L+F1
+EOF
+    chown -R $REAL_USER:$REAL_USER "$REAL_HOME/.config/MangoHud"
+    print_success "MangoHud configuré (visible par défaut)"
+}
+
+section_5_apps() {
+    print_status "5/15 Installation des applications (Brave, Discord, qBittorrent, VLC)"
+
+    # VLC & qBittorrent
+    print_status "Vérification VLC et qBittorrent..."
+    DEBIAN_FRONTEND=noninteractive apt install -y vlc qbittorrent
+    print_success "VLC & qBittorrent OK."
+
+    # Brave Browser - Méthode Robustesse
+    print_status "Installation de Brave Browser..."
+    if ! command -v brave-browser &> /dev/null; then
+        curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
+        echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main" > /etc/apt/sources.list.d/brave-browser-release.list
+        apt update
+        DEBIAN_FRONTEND=noninteractive apt install -y brave-browser
+        print_success "Brave Browser installé."
+    else
+        print_success "Brave est déjà installé."
+    fi
+
+    # Discord & Flatpak
+    print_status "Configuration Flatpak et Discord..."
+    flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+
+    # On autorise l'échec temporaire sur Discord
+    set +e
+    flatpak install -y flathub com.discordapp.Discord
+    if [ $? -eq 0 ]; then
+        print_success "Discord (Flatpak) installé."
+    else
+        print_warning "Discord n'a pas pu être installé (Erreur Flatpak). Tu pourras l'installer plus tard."
+    fi
+    set -e
+}
+
+section_5_security() {
+    print_status "6/15 Renforcement Sécurité (UFW + Fail2ban)"
+
+    DEBIAN_FRONTEND=noninteractive apt install -y ufw
+
+    ufw default deny incoming
+    ufw default allow outgoing
+
+    ufw limit ssh
+
+    # Activation force
+    echo "y" | ufw enable
+    print_success "UFW (Pare-feu) activé."
+
+    if systemctl is-active --quiet ssh || systemctl is-active --quiet sshd; then
+        print_status "Serveur SSH détecté. Installation de Fail2ban..."
+        DEBIAN_FRONTEND=noninteractive apt install -y fail2ban
+        tee /etc/fail2ban/jail.local <<EOF
+[DEFAULT]
+bantime = 1d
+maxretry = 3
+[sshd]
+enabled = true
+port = ssh
+EOF
+        systemctl enable --now fail2ban
+        print_success "Fail2ban activé."
+    fi
+}
+
+section_5_auto_security() {
+    print_status "7/15 Activation des Mises à jour de SÉCURITÉ Automatiques"
+
+    tee /etc/apt/apt.conf.d/20auto-upgrades <<EOF
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+APT::Periodic::AutocleanInterval "7";
+EOF
+
+    tee /etc/apt/apt.conf.d/50unattended-upgrades <<EOF
+Unattended-Upgrade::Allowed-Origins {
+    "\${distro_id}:\${distro_codename}-security";
+};
+Unattended-Upgrade::AutoFixInterruptedDpkg "true";
+Unattended-Upgrade::MinimalSteps "true";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+Unattended-Upgrade::Automatic-Reboot "false";
+EOF
+
+    print_success "Mises à jour SÉCURITÉ auto activées."
+}
+
+
+section_6() {
+    print_status "8/15 GameMode + hugepages (CORRIGÉ)"
+    DEBIAN_FRONTEND=noninteractive apt install -y gamemode
+
+    mkdir -p /etc/gamemode.d
+
+    cat > /etc/gamemode.d/custom.conf <<EOF
+[general]
+renice=-4
+[gpu]
+apply_gpu_optimisations=accept-responsibility
+gpu_device=0
+amd_performance_level=high
+[custom]
+start=notify-send "GameMode ON" ; echo 128 > /proc/sys/vm/nr_hugepages
+end=notify-send "GameMode OFF" ; echo 0 > /proc/sys/vm/nr_hugepages
+inhibit_screensaver=1
+EOF
+    print_success "GameMode configuré (Priorité HAUTE : renice=-4)."
+}
+
+section_7() {
+    print_status "9/15 Réseau 2.5 Gbps optimisé (BBR) (CORRIGÉ)"
+    modprobe tcp_bbr 2>/dev/null || true
+    echo "tcp_bbr" >> /etc/modules-load.d/modules.conf
+    tee /etc/sysctl.d/99-network-gaming.conf <<EOF
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+
+# Buffers optimisés pour 2.5 Gbps+ (32Mo)
+net.core.rmem_max = 33554432
+net.core.wmem_max = 33554432
+net.ipv4.tcp_rmem = 4096 87380 33554432
+net.ipv4.tcp_wmem = 4096 65536 33554432
+
+# Le reste est OK
+net.ipv4.tcp_fastopen = 3
+net.ipv4.tcp_low_latency = 1
+net.core.netdev_max_backlog = 30000
+net.core.somaxconn = 2048
+EOF
+    sysctl --system
+    NIC=$(ip route | grep default | awk '{print $5}' | head -n1)
+    if [ -n "$NIC" ]; then
+        ethtool -G "$NIC" rx 4096 tx 4096 &>/dev/null || true
+    fi
+    print_success "Réseau optimisé pour 2.5 Gbps."
+}
+
+section_17() {
+    print_status "10/15 GRUB (Stabilité CPU/GPU)"
+    if [ ! -f /etc/default/grub.backup ]; then
+        cp /etc/default/grub /etc/default/grub.backup
+    fi
+    sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash amd_pstate=guided"/g' /etc/default/grub
+    update-grub
+    print_success "GRUB mis à jour (amd_pstate=guided)."
+}
+
+section_19() {
+    print_status "11/15 Optimisations kernel finales"
+    tee /etc/sysctl.d/99-gaming-advanced.conf <<EOF
+vm.swappiness = 10
+vm.page-cluster = 0
+vm.vfs_cache_pressure = 50
+fs.file-max = 2097152
+EOF
+    sysctl --system
+    print_success "Sysctl appliqué."
+}
+
+section_zram() {
+    print_status "12/15 AJOUT : Configuration ZRAM (Swap en RAM)"
+    DEBIAN_FRONTEND=noninteractive apt install -y zram-tools
+    
+    # Configuration pour 32Go de RAM :
+    # On crée un ZRAM de 16Go (50% de la RAM)
+    # L'algorithme lz4 est le plus rapide.
+    tee /etc/systemd/zram-generator.conf <<EOF
+[zram0]
+zram-size = 16384
+compression-algorithm = lz4
+swap-priority = 100
+fs-type = swap
+EOF
+
+    # Re-générer et démarrer le service zram
+    systemctl daemon-reload
+    systemctl restart zram-generator.service
+    print_success "ZRAM (16Go, lz4) activé et configuré."
+}
+
+
+section_14_tkl_capslock() {
+    print_status "13/15 Configuration Clavier TKL (Verr. Maj = Chiffres)"
+    print_warning "Cette section ne fonctionne QUE si vous utilisez la session 'KDE (X11)'."
+    print_warning "Elle n'aura AUCUN EFFET sur la session 'Wayland' par défaut."
+
+    # 1. Sauvegarde du fichier original FR
+    if [ ! -f /usr/share/X11/xkb/symbols/fr.backup ]; then
+        cp /usr/share/X11/xkb/symbols/fr /usr/share/X11/xkb/symbols/fr.backup
+        print_status "Backup de symbols/fr créé."
+    fi
+
+    # 2. Création du fichier mswindows-capslock
+    mkdir -p /usr/share/X11/xkb/symbols # Sécurité
+    cat > /usr/share/X11/xkb/symbols/mswindows-capslock <<EOF
+// Replicate a "feature" of MS Windows on AZERTY keyboards
+// where Caps Lock also acts as a Shift Lock on number keys.
+// Include keys <AE01> to <AE10> in the FOUR_LEVEL_ALPHABETIC key type.
+
+partial alphanumeric_keys
+xkb_symbols "basic" {
+    key <AE01>	{ type= "FOUR_LEVEL_ALPHABETIC", [ ampersand,          1,          bar,   exclamdown ]	};
+    key <AE02>	{ type= "FOUR_LEVEL_ALPHABETIC", [    eacute,          2,           at,    oneeighth ]	};
+    key <AE03>	{ type= "FOUR_LEVEL_ALPHABETIC", [  quotedbl,          3,   numbersign,     sterling ]	};
+    key <AE04>	{ type= "FOUR_LEVEL_ALPHABETIC", [apostrophe,          4,   onequarter,       dollar ]	};
+    key <AE05>	{ type= "FOUR_LEVEL_ALPHABETIC", [ parenleft,          5,      onehalf, threeeighths ]	};
+    key <AE06>	{ type= "FOUR_LEVEL_ALPHABETIC", [   section,          6,  asciicircum,  fiveeighths ]	};
+    key <AE07>	{ type= "FOUR_LEVEL_ALPHABETIC", [    egrave,          7,    braceleft, seveneighths ]	};
+    key <AE08>	{ type= "FOUR_LEVEL_ALPHABETIC", [    exclam,          8,  bracketleft,    trademark ]	};
+    key <AE09>	{ type= "FOUR_LEVEL_ALPHABETIC", [  ccedilla,          9,    braceleft,    plusminus ]	};
+    key <AE10>	{ type= "FOUR_LEVEL_ALPHABETIC", [    agrave,          0,   braceright,       degree ]	};
+};
+EOF
+    print_status "Fichier symbols/mswindows-capslock créé."
+
+    # 3. Insertion de l'include dans le fichier FR si non présent
+    if grep -q "mswindows-capslock" /usr/share/X11/xkb/symbols/fr; then
+        print_success "Modification déjà présente dans symbols/fr."
+    else
+        # Insertion propre après 'include "latin"'
+        sed -i '/include "latin"/a \    include "mswindows-capslock"' /usr/share/X11/xkb/symbols/fr
+        print_success "Fichier symbols/fr patché avec succès."
+    fi
+
+    # Nettoyage du cache xkb
+    rm -rf /var/lib/xkb/*
+    print_success "Cache clavier nettoyé."
+}
+
+section_cleanup() {
+    print_status "14/15 Nettoyage final"
+    DEBIAN_FRONTEND=noninteractive apt autoremove -y
+    apt autoclean -y
+    print_success "Nettoyage terminé."
+}
+
+
+# --- EXÉCUTION ---
+print_highlight "Exécution des 14 sections (v8.1 Corrigée)..."
+
+# On lance les sections
+section_1
+section_2
+section_3
+section_4
+section_5_apps
+section_5_security
+section_5_auto_security
+section_6
+section_7
+section_17
+section_19
+section_zram  # <-- Ajout de ZRAM
+section_14_tkl_capslock
+section_cleanup
+
+print_section
+echo -e "${GREEN}╔═══════════════════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║      VERSION 8.1 TERMINÉE – SUCCÈS TOTAL                  ║${NC}"
+echo -e "${GREEN}║  PC prêt. ZRAM activé. Optims Réseau & GameMode OK.       ║${NC}"
+echo -e "${GREEN}╚═══════════════════════════════════════════════════════════╝${NC}"
+print_section
+
+echo -e "${YELLOW}REBOOT OBLIGATOIRE pour le clavier, le noyau et ZRAM : sudo reboot${NC}"
