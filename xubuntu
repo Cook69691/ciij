@@ -477,82 +477,54 @@ EOF
 }
 
 section_12_zram() {
-    print_status "12/16 Configuration ZRAM (Swap en RAM) - VERSION FINALE"
+    print_status "12/16 Configuration ZRAM (Swap en RAM) - FORCE ZRAM-TOOLS"
+
+    # 1. NETTOYAGE AGRESSIF (On supprime la cause du bug)
+    print_status "Suppression des anciennes configurations conflictuelles..."
     
-    # Vérifier si systemd-zram-generator est disponible dans les dépôts
-    if apt-cache show systemd-zram-generator &>/dev/null; then
-        print_status "Installation de systemd-zram-generator..."
-        DEBIAN_FRONTEND=noninteractive apt install -y systemd-zram-generator
-        
-        # S'assurer que le module kernel est chargé
-        modprobe zram
-        
-        # Créer le fichier de configuration
-        # CORRECTION ICI : Utilisation de zram-fraction au lieu de min() pour éviter le crash
-        mkdir -p /etc/systemd
-        tee /etc/systemd/zram-generator.conf <<'EOF'
-[zram0]
-zram-fraction = 0.5
-compression-algorithm = lz4
-swap-priority = 100
-EOF
-        
-        print_status "Configuration ZRAM créée. Activation..."
-        
-        # Recharger systemd pour qu'il voit le nouveau générateur
-        systemctl daemon-reload
-        
-        # Démarrage du service
-        print_status "Démarrage du service ZRAM..."
-        if systemctl start systemd-zram-setup@zram0.service; then
-            print_success "Service ZRAM démarré."
-        else
-            print_warning "Echec du démarrage standard, tentative via /dev/zram0..."
-            systemctl start /dev/zram0 2>/dev/null || true
-        fi
-        
-        # Vérification finale
-        sleep 2
-        if zramctl 2>/dev/null | grep -q zram0; then
-            print_success "ZRAM activé avec succès (lz4, 50% RAM)"
-            zramctl | grep zram0 || true
-        else
-            print_warning "systemd-zram-generator a échoué malgré la config valide. Passage à zram-tools..."
-            
-            # Nettoyage complet avant fallback
-            rm -f /etc/systemd/zram-generator.conf
-            systemctl stop systemd-zram-setup@zram0.service 2>/dev/null
-            DEBIAN_FRONTEND=noninteractive apt remove -y systemd-zram-generator --purge
-            
-            # --- FALLBACK ZRAM-TOOLS ---
-            DEBIAN_FRONTEND=noninteractive apt install -y zram-tools
-            tee /etc/default/zramswap <<'EOF'
+    # On arrête le service qui bug s'il tente de tourner
+    systemctl stop systemd-zram-setup@zram0.service 2>/dev/null
+    
+    # On désinstalle le paquet problématique pour de bon
+    DEBIAN_FRONTEND=noninteractive apt remove -y --purge systemd-zram-generator 2>/dev/null
+    
+    # On supprime le fichier de config qui causait l'erreur
+    rm -f /etc/systemd/zram-generator.conf
+    rm -f /etc/systemd/zram-generator.conf.d/*.conf 2>/dev/null
+    systemctl daemon-reload
+
+    # 2. INSTALLATION DE LA VERSION STABLE (zram-tools)
+    print_status "Installation de zram-tools (plus stable)..."
+    DEBIAN_FRONTEND=noninteractive apt install -y zram-tools
+
+    # 3. CONFIGURATION
+    # On configure pour 50% de la RAM en compression LZ4 (très rapide)
+    tee /etc/default/zramswap <<'EOF'
 ALGO=lz4
 PERCENT=50
 PRIORITY=100
 EOF
-            systemctl restart zramswap.service
-            systemctl enable zramswap.service
-            
-            if zramctl | grep -q zram0; then
-                print_success "ZRAM (zram-tools) activé en fallback."
-            else
-                print_error "Impossible d'activer ZRAM (ni generator, ni tools)."
-            fi
-        fi
+
+    # 4. DÉMARRAGE
+    print_status "Activation du ZRAM..."
+    systemctl restart zramswap.service
+    systemctl enable zramswap.service 2>/dev/null
+
+    # 5. VÉRIFICATION
+    sleep 2
+    if zramctl | grep -q "zram"; then
+        print_success "ZRAM activé avec succès via zram-tools."
+        echo "Statut actuel :"
+        zramctl
     else
-        # Si le paquet generator n'existe pas du tout
-        print_status "Installation de zram-tools (systemd-zram-generator non disponible)..."
-        DEBIAN_FRONTEND=noninteractive apt install -y zram-tools
-        
-        tee /etc/default/zramswap <<'EOF'
-ALGO=lz4
-PERCENT=50
-PRIORITY=100
-EOF
+        # Tentative de chargement manuel du module si échec
+        modprobe zram
         systemctl restart zramswap.service
-        systemctl enable zramswap.service
-        print_success "ZRAM (zram-tools) activé."
+        if zramctl | grep -q "zram"; then
+            print_success "ZRAM activé après forçage du module."
+        else
+            print_warning "ZRAM n'a pas pu démarrer. Vérifiez si votre kernel supporte zram."
+        fi
     fi
 }
 
