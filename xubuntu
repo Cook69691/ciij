@@ -1,7 +1,7 @@
 #!/bin/bash
 #==============================================================================
-# OPTIMISATION KUBUNTU 8.3 - VERSION CORRIGÉE ET FINALISÉE
-# CORRECTIONS : Conflit CPU (amd_pstate vs cpufreq), IRQ Ban, Redondance sysctl
+# OPTIMISATION KUBUNTU 8.4 - VERSION CORRIGÉE (ZRAM + BUGS RÉSOLUS)
+# CORRECTIONS : ZRAM configuration, syntax errors, compatibility
 # 7800X3D + 6950XT/7950XT + 32Go RAM + 2.5G NET
 #==============================================================================
 
@@ -15,7 +15,7 @@ print_status() { echo -e "${BLUE}[INFO]${NC} $1"; }
 print_success() { echo -e "${GREEN}[✓]${NC} $1"; }
 print_warning() { echo -e "${YELLOW}[⚠]${NC} $1"; }
 print_highlight() { echo -e "${MAGENTA}[★]${NC} $1"; }
-print_section() { echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"; }
+print_section() { echo -e "${CYAN}═════════════════════════════════════════════════════${NC}"; }
 
 # --- DÉTECTION ET VÉRIFICATIONS PRÉALABLES ---
 
@@ -36,11 +36,11 @@ if ! ping -c 1 1.1.1.1 &>/dev/null; then echo -e "${RED}Erreur : Pas de connexio
 detect_desktop
 
 print_section
-echo -e "${CYAN}  ╔═══════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${CYAN}  ║   OPTIMISATION KUBUNTU 8.3 - VERSION FINALISÉE (GAMING PRO)    ║${NC}"
-echo -e "${CYAN}  ║   7800X3D | 6950XT | 32Go@6000MHz | 2.5Gbps | Souris 1000Hz      ║${NC}"
-echo -e "${CYAN}  ║   Bureau : ${DESKTOP_ENV} / ${SESSION_TYPE}                                             ║${NC}"
-echo -e "${CYAN}  ╚═══════════════════════════════════════════════════════════════════╝${NC}"
+echo -e "${CYAN}  ╔═══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${CYAN}  ║   OPTIMISATION KUBUNTU 8.4 - VERSION CORRIGÉE (GAMING PRO)    ║${NC}"
+echo -e "${CYAN}  ║   7800X3D | 6950XT | 32Go@6000MHz | 2.5Gbps | Souris 1000Hz   ║${NC}"
+echo -e "${CYAN}  ║   Bureau : ${DESKTOP_ENV} / ${SESSION_TYPE}                                        ║${NC}"
+echo -e "${CYAN}  ╚═══════════════════════════════════════════════════════════════╝${NC}"
 print_section
 
 echo -e "${RED}⚠️  ATTENTION : CE SCRIPT MODIFIE DES PARAMÈTRES SYSTÈME CRITIQUES.${NC}"
@@ -64,8 +64,8 @@ section_2() {
     print_status "2/16 Pilotes AMD + flags RADV (Sécurisé)"
     DEBIAN_FRONTEND=noninteractive apt install -y mesa-vulkan-drivers mesa-utils libgl1-mesa-dri xserver-xorg-video-amdgpu vulkan-tools libvulkan1 mesa-va-drivers mesa-vdpau-drivers
     mkdir -p /etc/environment.d
-    cat > /etc/environment.d/amd-gpu.conf <<EOF
-RADV_PERFTEST=gpu,sam
+    cat > /etc/environment.d/amd-gpu.conf <<'EOF'
+RADV_PERFTEST=gpl,sam
 AMD_VULKAN_ICD=RADV
 EOF
     print_success "Pilotes AMD configurés"
@@ -82,7 +82,7 @@ section_4() {
     print_status "4/16 MangoHud (HUD performance)"
     DEBIAN_FRONTEND=noninteractive apt install -y mangohud goverlay
     mkdir -p "$REAL_HOME/.config/MangoHud"
-    cat > "$REAL_HOME/.config/MangoHud/MangoHud.conf" <<EOF
+    cat > "$REAL_HOME/.config/MangoHud/MangoHud.conf" <<'EOF'
 vsync=0
 # no_display=1  <-- Mis en commentaire. Le HUD sera VISIBLE par défaut.
 fps
@@ -140,7 +140,7 @@ section_5_security() {
     if systemctl is-active --quiet ssh || systemctl is-active --quiet sshd; then
         print_status "Serveur SSH détecté. Installation de Fail2ban..."
         DEBIAN_FRONTEND=noninteractive apt install -y fail2ban
-        tee /etc/fail2ban/jail.local <<EOF
+        tee /etc/fail2ban/jail.local <<'EOF'
 [DEFAULT]
 bantime = 1d
 maxretry = 3
@@ -155,14 +155,14 @@ EOF
 
 section_5_auto_security() {
     print_status "7/16 Activation des Mises à jour de SÉCURITÉ Automatiques"
-    tee /etc/apt/apt.conf.d/20auto-upgrades <<EOF
+    tee /etc/apt/apt.conf.d/20auto-upgrades <<'EOF'
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
 APT::Periodic::AutocleanInterval "7";
 EOF
-    tee /etc/apt/apt.conf.d/50unattended-upgrades <<EOF
+    tee /etc/apt/apt.conf.d/50unattended-upgrades <<'EOF'
 Unattended-Upgrade::Allowed-Origins {
-    "\${distro_id}:\${distro_codename}-security";
+    "${distro_id}:${distro_codename}-security";
 };
 Unattended-Upgrade::AutoFixInterruptedDpkg "true";
 Unattended-Upgrade::MinimalSteps "true";
@@ -177,7 +177,7 @@ section_6() {
     print_status "8/16 GameMode + hugepages (Priorité corrigée)"
     DEBIAN_FRONTEND=noninteractive apt install -y gamemode
     mkdir -p /etc/gamemode.d
-    cat > /etc/gamemode.d/custom.conf <<EOF
+    cat > /etc/gamemode.d/custom.conf <<'EOF'
 [general]
 renice=-4
 [gpu]
@@ -196,7 +196,7 @@ section_7() {
     print_status "9/16 Réseau 2.5 Gbps optimisé (BBR) (Buffers corrigés)"
     modprobe tcp_bbr 2>/dev/null || true
     echo "tcp_bbr" >> /etc/modules-load.d/modules.conf
-    tee /etc/sysctl.d/99-network-gaming.conf <<EOF
+    tee /etc/sysctl.d/99-network-gaming.conf <<'EOF'
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
 
@@ -208,7 +208,6 @@ net.ipv4.tcp_wmem = 4096 65536 33554432
 
 # Le reste est OK
 net.ipv4.tcp_fastopen = 3
-# net.ipv4.tcp_low_latency = 1 (Déplacé vers 97-kernel-responsiveness.conf)
 net.core.netdev_max_backlog = 30000
 net.core.somaxconn = 2048
 EOF
@@ -232,7 +231,7 @@ section_10_grub() {
 
 section_11_kernel_base() {
     print_status "11/16 Optimisations kernel (Swappiness, Cache)"
-    tee /etc/sysctl.d/99-gaming-advanced.conf <<EOF
+    tee /etc/sysctl.d/99-gaming-advanced.conf <<'EOF'
 vm.swappiness = 10
 vm.page-cluster = 0
 vm.vfs_cache_pressure = 50
@@ -243,24 +242,50 @@ EOF
 }
 
 section_12_zram() {
-    print_status "12/16 Configuration ZRAM (Swap en RAM)"
-    DEBIAN_FRONTEND=noninteractive apt install -y zram-tools
-    tee /etc/systemd/zram-generator.conf <<EOF
+    print_status "12/16 Configuration ZRAM (Swap en RAM) - CORRIGÉ"
+    
+    # Détection de la version Ubuntu pour choisir le bon paquet
+    UBUNTU_VERSION=$(lsb_release -rs 2>/dev/null | cut -d. -f1)
+    
+    if [ "$UBUNTU_VERSION" -ge 22 ]; then
+        # Pour Ubuntu 22.04+ : utiliser systemd-zram-generator
+        print_status "Installation de systemd-zram-generator (Ubuntu 22.04+)..."
+        DEBIAN_FRONTEND=noninteractive apt install -y systemd-zram-generator
+        
+        mkdir -p /etc/systemd
+        tee /etc/systemd/zram-generator.conf <<'EOF'
 [zram0]
-zram-size = 16384
+zram-size = min(ram / 2, 16384)
 compression-algorithm = lz4
 swap-priority = 100
-fs-type = swap
 EOF
-    systemctl daemon-reload
-    systemctl restart zram-generator.service
-    print_success "ZRAM (16Go, lz4) activé et configuré."
+        systemctl daemon-reload
+        systemctl start systemd-zram-setup@zram0.service
+        systemctl enable systemd-zram-setup@zram0.service
+        print_success "ZRAM (systemd-zram-generator) activé."
+    else
+        # Pour Ubuntu 20.04 et antérieur : utiliser zram-tools
+        print_status "Installation de zram-tools (Ubuntu <22.04)..."
+        DEBIAN_FRONTEND=noninteractive apt install -y zram-tools
+        
+        tee /etc/default/zramswap <<'EOF'
+# Compression algorithm (lzo, lz4, zstd)
+ALGO=lz4
+# Percentage of RAM to use for ZRAM (100 = 100% of RAM)
+PERCENT=50
+# Priority
+PRIORITY=100
+EOF
+        systemctl restart zramswap.service
+        systemctl enable zramswap.service
+        print_success "ZRAM (zram-tools) activé."
+    fi
 }
 
 section_13_gaming_mouse() {
     print_status "13/16 🎮 Souris Gaming 1000Hz (Polling Rate Optimisé)"
     
-    tee /etc/udev/rules.d/50-mouse-gaming.rules <<EOF
+    tee /etc/udev/rules.d/50-mouse-gaming.rules <<'EOF'
 # Optimisation souris gaming : 1000Hz polling rate
 # Force le taux de rafraîchissement USB à 1000Hz (1ms) pour toutes les souris
 ACTION=="add", SUBSYSTEM=="usb", DRIVER=="usbhid", ATTR{bInterval}=="*", ATTR{bInterval}="1"
@@ -277,11 +302,11 @@ section_14_kernel_latency() {
     print_status "14/16 ⚡ Réactivité Noyau Maximale (Low-Latency)"
     
     # Installation du noyau low-latency si disponible
-    DEBIAN_FRONTEND=noninteractive apt install -y linux-lowlatency || print_warning "Noyau low-latency non disponible, optimisations alternatives appliquées"
+    DEBIAN_FRONTEND=noninteractive apt install -y linux-lowlatency 2>/dev/null || print_warning "Noyau low-latency non disponible, optimisations alternatives appliquées"
     
     # Optimisations agressives du scheduler pour la réactivité
-    tee /etc/sysctl.d/97-kernel-responsiveness.conf <<EOF
-# === RÉACTIVITÉ NOYAU MAXIMALE POUR GAMING (v8.3 Corrigée) ===
+    tee /etc/sysctl.d/97-kernel-responsiveness.conf <<'EOF'
+# === RÉACTIVITÉ NOYAU MAXIMALE POUR GAMING (v8.4 Corrigée) ===
 
 # Scheduler : Préemption rapide pour réactivité instantanée
 kernel.sched_latency_ns = 6000000
@@ -307,19 +332,15 @@ net.ipv4.tcp_low_latency = 1
 
 # File d'attente CPU optimisée (Classique)
 kernel.sched_autogroup_enabled = 0
-
-# kernel.timer_migration = 0 (Supprimé - Contre-productif)
 EOF
 
-    # IRQ Balance pour meilleures performances (SANS BANNIR CPU0)
+    # IRQ Balance pour meilleures performances
     DEBIAN_FRONTEND=noninteractive apt install -y irqbalance
-    # La ligne sed pour BANNED_CPUS=0x01 a été supprimée (Nocif sur 7800X3D)
     systemctl enable irqbalance
     
     sysctl --system
     
     print_success "Réactivité noyau maximale configurée (Low-Latency + Anti-Saccade)"
-    print_highlight "🚀 Conflit CPU résolu (amd_pstate est seul maître)"
 }
 
 section_15_tkl_capslock() {
@@ -332,8 +353,8 @@ section_15_tkl_capslock() {
         print_status "Backup de symbols/fr créé."
     fi
 
-    mkdir -p /usr/share/X11/xkb/symbols # Sécurité
-    cat > /usr/share/X11/xkb/symbols/mswindows-capslock <<EOF
+    mkdir -p /usr/share/X11/xkb/symbols
+    cat > /usr/share/X11/xkb/symbols/mswindows-capslock <<'EOF'
 partial alphanumeric_keys
 xkb_symbols "basic" {
     key <AE01>	{ type= "FOUR_LEVEL_ALPHABETIC", [ ampersand,          1,          bar,   exclamdown ]	};
@@ -370,7 +391,7 @@ section_16_cleanup() {
 
 
 # --- EXÉCUTION ---
-print_highlight "Exécution des 16 sections (v8.3 Corrigée et Finalisée)..."
+print_highlight "Exécution des 16 sections (v8.4 Corrigée et Finalisée)..."
 
 section_1
 section_2
@@ -390,11 +411,11 @@ section_15_tkl_capslock
 section_16_cleanup
 
 print_section
-echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║      VERSION 8.3 TERMINÉE — SUCCÈS TOTAL (FINALISÉE)           ║${NC}"
-echo -e "${GREEN}║  🎮 Souris 1000Hz | ⚡ Noyau Low-Latency | 🚀 Conflits Résolus   ║${NC}"
-echo -e "${GREEN}║  Réactivité maximale + Sécurité renforcée + Stabilité assurée    ║${NC}"
-echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════════╝${NC}"
+echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║      VERSION 8.4 TERMINÉE — SUCCÈS TOTAL (BUGS CORRIGÉS)      ║${NC}"
+echo -e "${GREEN}║  🎮 Souris 1000Hz | ⚡ Noyau Low-Latency | 🚀 ZRAM Fixed       ║${NC}"
+echo -e "${GREEN}║  Réactivité maximale + Sécurité renforcée + Stabilité assurée ║${NC}"
+echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
 print_section
 
 echo -e "${YELLOW}REBOOT OBLIGATOIRE pour activer toutes les optimisations : ${RED}sudo reboot${NC}"
