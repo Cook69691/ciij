@@ -1,0 +1,148 @@
+✅ 1. Activer RPM Fusion (Free + Nonfree) + Discord, VLC, Qbittorrent :
+
+sudo dnf install \
+https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm \
+https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm
+sudo dnf update
+sudo dnf upgrade --refresh -y && sudo dnf autoremove -y
+sudo dnf install ffmpeg
+sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+flatpak install -y flathub org.videolan.VLC
+flatpak install -y flathub org.qbittorrent.qBittorrent
+flatpak install -y flathub com.discordapp.Discord
+sudo dnf install -y dnf-plugins-core
+sudo dnf config-manager addrepo --from-repofile=https://repository.mullvad.net/rpm/stable/mullvad.repo
+sudo dnf install mullvad-vpn
+
+✅ 2. Activer l’installation automatique des mises à jour de sécurité (recommandé) :
+
+sudo dnf install dnf-automatic
+
+sudo nano /etc/dnf/automatic.conf  :
+
+[commands]
+upgrade_type = security
+apply_updates = yes
+
+[emitters]
+emit_via = motd
+
+[download]
+download_updates = yes
+
+[upgrade]
+random_sleep = 0
+
+sudo systemctl enable --now dnf-automatic.timer
+systemctl status dnf-automatic.timer (Tu dois voir : active (running).)
+
+✅ 3. Parfeu :
+
+sudo dnf install firewalld firewall-config firewall-applet
+sudo systemctl enable --now firewalld
+sudo firewall-cmd --set-default-zone=public
+sudo firewall-cmd --permanent --remove-service=ssh
+sudo firewall-cmd --permanent --remove-service=mdns
+sudo firewall-cmd --permanent --remove-service=samba
+sudo firewall-cmd --permanent --remove-port=22/tcp
+sudo firewall-cmd --reload
+systemctl status firewalld (Vérifier)
+ 
+✅ 4. Désactiver et arrêter le service SSH (+ protocoles de connexion distante) :
+
+sudo systemctl stop sshd
+sudo systemctl disable sshd
+sudo systemctl stop avahi-daemon
+sudo systemctl disable avahi-daemon
+sudo systemctl stop smb nmb
+sudo systemctl disable smb nmb
+sudo systemctl mask sshd
+sudo systemctl disable --now cups bluetooth ModemManager wpa_supplicant rpcbind nfs-client.target
+sudo systemctl mask cups bluetooth ModemManager wpa_supplicant rpcbind nfs-client.target
+
+✅ 5.  Fail2ban :
+
+sudo dnf install fail2ban
+sudo systemctl enable --now fail2ban
+systemctl status fail2ban
+sudo nano /etc/fail2ban/jail.local
+
+[DEFAULT]
+# Durée de bannissement (1h)
+bantime = 86400
+findtime = 600
+maxretry = 3
+
+# Réinitialisation après 10 min
+findtime = 600
+
+# 5 tentatives ratées max
+maxretry = 5
+
+# Envoyer les bans au firewall firewalld
+banaction = firewallcmd-multiport
+banaction_allports = firewallcmd-allports
+
+[nginx-http-auth]
+enabled = true
+
+sudo systemctl restart fail2ban
+
+✅ 6. Mises à jour firmware et BIOS :
+
+sudo dnf install fwupd
+sudo systemctl enable --now fwupd-refresh.timer
+sudo fwupdmgr refresh
+sudo fwupdmgr update
+
+✅ 7. SELinux (Vérifier qu'il est installer et activé) : 
+
+sestatus
+systemctl list-unit-files --state=enabled
+sudo ss -tulnp
+
+✅ 8. DNS :
+
+sudo systemctl enable --now systemd-resolved
+sudo systemctl status systemd-resolved
+sudo nano /etc/systemd/resolved.conf :
+
+[Resolve]
+DNS=1.1.1.1 1.0.0.1
+DNSOverTLS=yes
+#FallbackDNS=9.9.9.9 149.112.112.112
+Cache=no
+DNSSEC=yes
+
+sudo systemctl restart systemd-resolved
+
+✅ 9. Karnel Sécurisé : 
+
+sudo tee /etc/sysctl.d/99-hardening.conf <<EOF
+kernel.yama.ptrace_scope = 1
+kernel.kptr_restrict = 2
+net.ipv4.tcp_syncookies = 1
+net.ipv4.conf.all.accept_redirects = 0
+net.ipv6.conf.all.accept_redirects = 0
+net.ipv4.conf.all.send_redirects = 0
+net.ipv4.conf.all.accept_source_route = 0
+fs.suid_dumpable = 0
+EOF
+sudo sysctl -p /etc/sysctl.d/99-hardening.conf
+
+✅ 10. Fedora Configuration : 
+
+- Search Engine (Startpage) : https://www.startpage.com/ 
+- Web Browser : Firefox
+- VPN : Mullvad VPN [+ DAITA & Multihop + Kill-switch VPN]
+- OS : Fedora 
+- Google Translate -> DeepL
+- Google Gmail -> ProtonMail
+
+- Firefox Addons : uBlock Origin, LocalCDN, ClearUrl, Privacy Badger, ProtonPass, BlockAutority
+
+
+
+
+
+
